@@ -37,7 +37,7 @@ function play(zone, seed, opts = {}) {
       const v = Math.max(3, Math.abs(p.gsp)); let pit = false; for (let d = 6; d <= v * 14; d += 6) if (!Number.isFinite(L.groundY(st.level, p.x + d))) { pit = true; break; }
       const hazard = pit || near(st.level.spikes, v * 14) || near(st.level.springs, v * 14) || st.enemies.some((e) => e.alive && e.x > p.x && e.x - p.x < v * 14);
       if (planLeft > 0) planLeft--;
-      if (hazard && planLeft <= 0) {
+      if (hazard && (planLeft <= 0 || (pit && plan.roll))) {                                  // 구르는 중에 구멍이 나타나면 다시 계획한다
         let best = null;
         for (const pl of PLANS) { const r = rollout(st, pl, frames); const score = (r.dead ? -1e6 : 0) + (r.hurt ? -1e4 : 0) + r.x + (pl.name === 'run' ? 0.5 : 0); if (!best || score > best.score) best = { pl, score }; }
         plan = best.pl; planLeft = plan.jump ? plan.delay + 4 : plan.roll ? plan.roll : 6; waitJump = plan.jump ? plan.delay : -1; if (plan.roll) inp = { right: true, down: true };

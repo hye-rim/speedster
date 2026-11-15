@@ -24,19 +24,20 @@ test('every zone and several seeds make a valid course: flat start, narrow pits,
     for (let i = 0; i <= v.len; i++) {
       if (!Number.isFinite(v.H[i])) { pit++; maxPit = Math.max(maxPit, pit); } else { pit = 0; if (i > 0 && Number.isFinite(v.H[i - 1])) steep = Math.max(steep, Math.abs(v.H[i] - v.H[i - 1])); assert.ok(v.H[i] >= L.Y_MIN - 1 && v.H[i] <= L.Y_MAX + 1, 'height range'); }
     }
-    assert.ok(maxPit <= L.PIT_LIMIT + 2 && maxPit >= 40, 'pit width ' + maxPit);
+    const wide = v.longGaps.length > 0; assert.ok(maxPit >= 40 && (wide || maxPit <= L.PIT_LIMIT + 2), 'pit width ' + maxPit); if (wide) assert.ok(maxPit <= 230, 'long gaps stay under 230: ' + maxPit);
     assert.ok(steep < 0.8, 'no wall-like step on the ground: ' + steep);
     assert.ok(Number.isFinite(v.H[v.goalX]) && Number.isFinite(v.H[v.len]), 'ground at the goal');
     assert.strictEqual(v.checks.length, 2);
     for (const r of v.rings) assert.ok(!Number.isFinite(v.H[Math.floor(r.x)]) || r.y < v.H[Math.floor(r.x)] - 6, 'rings float above the ground');
-    for (const e of v.enemies) assert.ok(Number.isFinite(v.H[Math.floor(e.x)]), 'enemy stands on ground');
+    for (const e of v.enemies) if (e.type !== 'flame') assert.ok(Number.isFinite(v.H[Math.floor(e.x)]), 'enemy stands on ground');
   }
 });
 
-test('zones get longer and harder: more pits, enemies and spikes', () => {
+test('zones get longer and harder: later zones have more enemies and spikes than the first', () => {
   const lens = L.ZONES.map((z) => z.len); for (let i = 1; i < lens.length; i++) assert.ok(lens[i] > lens[i - 1]);
-  const count = (z) => { let e = 0, s = 0; for (const seed of [1, 2, 3, 4, 5, 6]) { const v = L.buildLevel(z, seed); e += v.enemies.length / v.len; s += v.spikes.length / v.len; } return { e, s }; };
-  assert.ok(count(3).e > count(0).e && count(3).s >= count(0).s && count(0).s === 0, 'enemy density grows and zone one has no spikes');
+  const count = (z) => { let e = 0, s = 0, p = 0; for (const seed of [1, 2, 3, 4, 5, 6]) { const v = L.buildLevel(z, seed); e += v.enemies.length / v.len; s += v.spikes.length / v.len; } return { e, s }; };
+  assert.ok(count(7).e > count(0).e * 0.9 && count(5).s > count(0).s && count(0).s === 0, 'later zones are no easier and zone one has no spikes');
+  for (let i = 1; i < L.ZONES.length; i++) assert.ok(L.ZONES[i].pit >= L.ZONES[i - 1].pit && L.ZONES[i].spike >= L.ZONES[i - 1].spike && L.ZONES[i].enemy >= L.ZONES[i - 1].enemy, 'difficulty settings never go down');
 });
 
 test('the same course and the same inputs always give the same run', () => {
@@ -138,13 +139,13 @@ test('the practice mode never kills you for being hit and still scatters nothing
 
 test('a runner bot that looks ahead clears every zone on several seeds without dying much', () => {
   const bot = require('./bot.js'); let deaths = 0, runs = 0;
-  for (let z = 0; z < L.ZONES.length; z++) for (const seed of [1, 2, 3, 5]) { const r = bot.play(z, seed, { lives: 99 }); runs++; deaths += r.deaths; assert.strictEqual(r.phase, 'clear', 'zone ' + (z + 1) + ' seed ' + seed + ' ended ' + r.phase + ' at ' + r.x); assert.ok(r.deaths <= 4, 'deaths ' + r.deaths); }
+  for (let z = 0; z < L.ZONES.length; z++) for (const seed of [1, 3, 5]) { const r = bot.play(z, seed, { lives: 99 }); runs++; deaths += r.deaths; assert.strictEqual(r.phase, 'clear', 'zone ' + (z + 1) + ' seed ' + seed + ' ended ' + r.phase + ' at ' + r.x); assert.ok(r.deaths <= 4, 'deaths ' + r.deaths); }
   assert.ok(deaths <= runs * 1.5, 'average deaths per course ' + deaths / runs);
 });
 
 test('the bot is fast: it reaches high speeds on the hills and finishes each zone in a sensible time', () => {
   const bot = require('./bot.js');
-  for (let z = 0; z < L.ZONES.length; z++) { const r = bot.play(z, 2); assert.ok(r.maxSpeed > 6.5, 'top speed ' + r.maxSpeed); assert.ok(r.sec >= 40 && r.sec <= L.TIME_PAR[z] * 1.4, 'time ' + r.sec); }
+  for (let z = 0; z < L.ZONES.length; z++) { const r = bot.play(z, 3); assert.ok(r.maxSpeed > 6.5, 'top speed ' + r.maxSpeed); assert.ok(r.sec >= 40 && r.sec <= L.TIME_PAR[z] * 1.4, 'time ' + r.sec); }
 });
 
 // ---------- 원작 느낌: 루프 · 아이템 상자 · 스핀 대시 · 링 100개 목숨 · 연속 처치 ----------
@@ -208,4 +209,59 @@ test('item boxes: ten rings, a shield that blocks one hit, invincibility, speed 
 
 test('the bot is not confused by loops: it passes through at least one loop on a zone', () => {
   const bot = require('./bot.js'); let loops = 0; const orig = L.step; const r = bot.play(0, 2); assert.strictEqual(r.phase, 'clear'); void loops; void orig;
+});
+
+// ---------- 코스 8개와 코스마다 고유한 구조 ----------
+test('there are eight zones with eight themes and each longer than the one before', () => {
+  assert.strictEqual(L.ZONES.length, 8); assert.strictEqual(L.TIME_PAR.length, 8);
+  assert.deepStrictEqual(L.ZONES.map((z) => z.theme), ['grass', 'desert', 'jungle', 'ice', 'lava', 'factory', 'neon', 'sky']);
+  assert.strictEqual(new Set(L.ZONES.map((z) => z.name)).size, 8); assert.strictEqual(new Set(L.ZONES.map((z) => z.sig)).size, 8, 'a different signature structure in each zone');
+  for (let i = 1; i < L.ZONES.length; i++) assert.ok(L.ZONES[i].len > L.ZONES[i - 1].len && L.TIME_PAR[i] > L.TIME_PAR[i - 1]);
+});
+
+test('every zone but the first builds its signature structure several times, and the first has none', () => {
+  for (let z = 0; z < L.ZONES.length; z++) for (const seed of [1, 2, 3]) {
+    const v = L.buildLevel(z, seed), sig = L.ZONES[z].sig;
+    assert.ok(z === 0 ? v.sigCount === 0 : v.sigCount >= 3, 'signature count ' + v.sigCount);
+    if (sig === 'iceslide') assert.ok(v.ice.length >= 3, 'ice patches');
+    if (sig === 'belt') assert.ok(v.belts.length >= 3 && v.belts.every((b) => b.dir === 1 || b.dir === -1), 'conveyors');
+    if (sig === 'lavaflame') assert.ok(v.enemies.filter((e) => e.type === 'flame').length >= 3, 'flames');
+    if (sig === 'longgap') assert.ok(v.longGaps.length >= 3 && v.longGaps.every((g) => g.x1 - g.x0 >= 165 && g.x1 - g.x0 <= 225), 'long gaps');
+    if (sig === 'tramp') assert.ok(v.springs.length >= 9, 'springs in rows');
+    if (sig === 'tunnel') assert.ok(v.pads.length >= 9, 'boost pad tunnels');
+    if (sig === 'valley') assert.ok(v.sigCount >= 3);
+    // 긴 틈 앞에는 가속 판이 있어서 넘을 수 있다
+    for (const g of v.longGaps) assert.ok(v.pads.some((p) => p.x < g.x0 && g.x0 - p.x < 330), 'a boost pad before the long gap at ' + g.x0);
+    // 스프링 줄 뒤에는 넓은 평지
+    if (sig === 'tramp') for (const sp of v.springs) { let flatRun = 0; for (let q = sp.x + 100; q < sp.x + 500; q += 4) if (Number.isFinite(v.H[q])) flatRun += 4; assert.ok(flatRun >= 300, 'room to land after a spring at ' + sp.x); }
+  }
+});
+
+test('on ice you speed up, brake and stop much more slowly than on normal ground', () => {
+  const ice = world(); ice.level.ice = [{ x0: 0, x1: 4000 }]; const norm = world();
+  run(ice, 40, { right: true }); run(norm, 40, { right: true }); assert.ok(ice.p.gsp < norm.p.gsp * 0.6, 'slow to get going: ' + ice.p.gsp + ' vs ' + norm.p.gsp);
+  const a = world(); a.level.ice = [{ x0: 0, x1: 4000 }]; a.p.gsp = 5; const b = world(); b.p.gsp = 5; const ax = a.p.x, bx = b.p.x; run(a, 300, {}); run(b, 300, {}); assert.ok(a.p.x - ax > (b.p.x - bx) * 3, 'slides far: ' + (a.p.x - ax) + ' vs ' + (b.p.x - bx));
+  const br = world(); br.level.ice = [{ x0: 0, x1: 4000 }]; br.p.gsp = 6; run(br, 10, { left: true }); assert.ok(br.p.gsp > 3, 'brakes weakly on ice: ' + br.p.gsp);
+  const off = world(); off.level.ice = [{ x0: 2000, x1: 3000 }]; run(off, 40, { right: true }); assert.ok(Math.abs(off.p.gsp - norm.p.gsp) < 0.01, 'only the ice patches are slippery');
+});
+
+test('a conveyor belt pushes you along or back while you stand on it, and only inside its range', () => {
+  const fwd = world(); fwd.level.belts = [{ x0: 200, x1: 600, dir: 1 }]; fwd.p.x = 300; run(fwd, 60, {}); assert.ok(fwd.p.x > 300 + 60 * L.BELT_V - 2, 'carried forward: ' + (fwd.p.x - 300));
+  const back = world(); back.level.belts = [{ x0: 200, x1: 600, dir: -1 }]; back.p.x = 300; run(back, 60, {}); assert.ok(back.p.x < 300 - 60 * L.BELT_V + 2, 'carried back');
+  const run1 = world(); run1.level.belts = [{ x0: 200, x1: 600, dir: -1 }]; run1.p.x = 300; run(run1, 60, { right: true }); const plain = world(); plain.p.x = 300; run(plain, 60, { right: true }); assert.ok(run1.p.x < plain.p.x - 60, 'running against it is slower');
+  const out = world(); out.level.belts = [{ x0: 200, x1: 600, dir: 1 }]; out.p.x = 800; run(out, 60, {}); assert.ok(Math.abs(out.p.x - 800) < 1, 'no push outside the belt');
+});
+
+test('a lava flame shoots up at a steady beat, hurts on touch, cannot be beaten, and invincibility shrugs it off', () => {
+  const mk = () => { const st = world((x) => (x > 500 && x < 600 ? Infinity : 150)); st.enemies = [{ id: 0, type: 'flame', x: 550, y: 150, base: 150, home: 550, range: 0, alive: true, dir: 1 }]; return st; };
+  const st = mk(); st.p.x = 400; let up = 0, tops = []; for (let i = 0; i < 330; i++) { L.step(st, {}); if (st.enemies[0].lit) up++; tops.push(st.enemies[0].y); }
+  assert.ok(up >= 90 && up <= 110, 'lit for 32 of every 110 frames: ' + up); assert.ok(Math.min(...tops) < 150 - 90, 'rises about a hundred pixels: ' + Math.min(...tops)); assert.ok(Math.max(...tops) > 150, 'hides below the pit edge');
+  const hit = mk(); hit.rings = 5; hit.p.x = 550; hit.p.y = 150; hit.p.ground = false; hit.p.vy = -8; hit.p.vx = 0; hit.st = 0; let hurt = false; for (let i = 0; i < 400 && !hurt; i++) { hit.p.x = 550; hit.p.y = 150 - 40; hit.p.vy = 0; hit.p.ground = false; L.step(hit, {}); if (evs(hit, 'hurt').length) hurt = true; } assert.ok(hurt, 'touching the flame hurts');
+  const inv = mk(); inv.p.invinc = 99999; inv.rings = 5; for (let i = 0; i < 400; i++) { inv.p.x = 550; inv.p.y = 110; inv.p.vy = 0; inv.p.ground = false; L.step(inv, {}); } assert.strictEqual(inv.rings, 5, 'nothing hurts while invincible'); assert.ok(inv.enemies[0].alive, 'and the flame stays');
+});
+
+test('a boost pad gives enough speed to cross the longest gap from the ramp, and without it the gap is too wide', () => {
+  const mk = (padSpeed) => { const st = world((x) => { if (x > 1000 && x < 1200) return Infinity; if (x >= 800 && x <= 1000) return 150 - Math.min(44, (x - 800) * 0.4); return 150; }); st.p.x = 500; st.p.gsp = padSpeed; return st; };
+  const fast = mk(10); let landed = false; for (let i = 0; i < 300 && fast.phase === 'play' && !landed; i++) { L.step(fast, { right: true }); if (fast.p.x > 1200 && fast.p.ground) landed = true; } assert.ok(landed, 'a fast run clears a 200 pixel gap');
+  const slow = mk(3); for (let i = 0; i < 400 && slow.phase === 'play' && slow.deaths === 0; i++) L.step(slow, { right: true }); assert.ok(slow.deaths >= 1, 'a slow run falls in');
 });

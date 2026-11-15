@@ -14,7 +14,7 @@ const store = {
 const LAST = L.ZONES.length - 1;
 let unlocked = Math.max(0, Math.min(LAST, store.get('spZone', 0) | 0)), best = store.get('spBest', 0) | 0, soundOn = store.get('spSound', true);
 let G = null, screen = 'title', paused = false, selZone = unlocked, runScore = 0, endT = 0;
-let camX = 0, clock = 0, fx = [], floats = [], shake = 0, banner = null, trail = [];
+let camX = 0, camY = 0, clock = 0, fx = [], floats = [], shake = 0, banner = null, trail = [];
 const TITLE_HTML = $('overlay').innerHTML;
 
 // ---------- 소리 ----------
@@ -124,7 +124,7 @@ function showTitle() {
 }
 function startZone(zone, carry) {
   selZone = zone; G = L.newGame({ zone, seed: TUT ? 1 : (Date.now() % 9973) + 1, score: carry, tutorial: TUT });
-  camX = 0; fx = []; floats = []; shake = 0; trail = []; endT = 0; paused = false; screen = 'play'; releaseAll(); hideOverlay();
+  camX = 0; camY = 0; fx = []; floats = []; shake = 0; trail = []; endT = 0; paused = false; screen = 'play'; releaseAll(); hideOverlay();
   banner = { text: TUT ? '연습' : `${zone + 1}코스 ${G.level.name}`, sub: TUT ? '달리고 · 뛰고 · 링을 모아 보세요' : (SIG_HINT[G.level.sig] || '골까지 달려요!'), t: 0 };
 }
 const SIG_HINT = { valley: '깊은 계곡! 구르면 엄청 빨라져요', tramp: '스프링 줄! 연달아 튀어 올라요', iceslide: '미끄러운 얼음! 브레이크가 잘 안 들어요', lavaflame: '용암 불꽃! 솟는 때를 봐서 건너요', belt: '컨베이어! 땅이 밀어 줘요', tunnel: '가속 판 터널! 점점 빨라져요', longgap: '긴 틈! 가속 판으로 속도를 붙여 날아요' };
@@ -174,7 +174,7 @@ function handle(events) {
     else if (e.t === 'spring') { sfx.spring(); tutorialSignal('spring'); }
     else if (e.t === 'boost') { sfx.boost(); tutorialSignal('boost'); }
     else if (e.t === 'check') { sfx.check(); floats.push({ x: e.x, y: 80, t: 0, text: '체크포인트' }); }
-    else if (e.t === 'respawn') { camX = Math.max(0, G.p.x - 110); trail = []; }
+    else if (e.t === 'respawn') { camX = Math.max(0, G.p.x - 110); camY = 0; trail = []; }
     else if (e.t === 'clear') { tutorialSignal('clear'); burst(G.p.x, G.p.y - 12, '#ffe27a', 24, 3); }
   }
 }
@@ -211,11 +211,12 @@ function drawBackground(th) {
   else if (name === 'neon') { sun(240, 40, 14, '#f4eeff'); sun(246, 36, 12, '#2a1a5a'); }
   else if (name === 'lava') { ctx.fillStyle = 'rgba(255,120,40,.25)'; ctx.fillRect(0, 100, VW, 100); }
   // 멀리 있는 장식(시차 0.2) → 가까운 장식(0.45)
+  ctx.save(); ctx.translate(0, -camY * 0.3);                                         // 산·건물 같은 배경 층은 세로로도 조금 움직인다 (시차)
   const far = phased(th.far, prog, mix), near = phased(th.near, prog, mix);
   const layer = (color, par, base, amp, wl, shape) => {
-    ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0, VH);
+    ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0, VH + 600);
     for (let sx = 0; sx <= VW; sx += 6) { const wx = sx + camX * par; ctx.lineTo(sx, base - (shape === 'peak' ? Math.abs(((wx / wl) % 2 + 2) % 2 - 1) * amp : shape === 'mesa' ? (Math.sin(wx / wl * Math.PI) > 0.2 ? amp : amp * 0.15) : Math.abs(Math.sin(wx / wl * Math.PI)) * amp)); }
-    ctx.lineTo(VW, VH); ctx.fill();
+    ctx.lineTo(VW, VH + 600); ctx.fill();
   };
   const shapeOf = { grass: ['hill', 'hill'], desert: ['mesa', 'hill'], jungle: ['hill', 'hill'], ice: ['peak', 'peak'], lava: ['peak', 'hill'], factory: ['mesa', 'mesa'], neon: ['mesa', 'mesa'], sky: ['hill', 'hill'] }[name];
   layer(far, 0.2, 128, name === 'ice' || name === 'lava' ? 70 : 42, name === 'desert' ? 120 : 200, shapeOf[0]);
@@ -225,6 +226,7 @@ function drawBackground(th) {
   decorate(name, prog, 0.45);
   if (name === 'lava') { const lg = ctx.createLinearGradient(0, VH - 34, 0, VH); lg.addColorStop(0, 'rgba(255,120,30,0)'); lg.addColorStop(0.6, '#ff6a1a'); lg.addColorStop(1, '#ffc040'); ctx.fillStyle = lg; ctx.fillRect(0, VH - 34, VW, 34); ctx.fillStyle = 'rgba(255,230,120,.7)'; for (let i = 0; i < 18; i++) ctx.fillRect(((i * 23 - clock * 20) % VW + VW) % VW, VH - 10 + (i % 3) * 3, 6, 2); }
   if (name === 'sky') { ctx.fillStyle = 'rgba(255,255,255,.85)'; for (let i = 0; i < 9; i++) { const x = ((i * 47 - camX * 0.7) % (VW + 90) + VW + 90) % (VW + 90) - 45; ctx.beginPath(); ctx.ellipse(x, VH - 6 + (i % 3) * 4, 34, 11, 0, 0, 6.283); ctx.ellipse(x + 20, VH - 10 + (i % 2) * 3, 24, 9, 0, 0, 6.283); ctx.fill(); } }
+  ctx.restore();
 }
 // 테마별 장식: par 가 0.2 이면 먼 층, 0.45 이면 가까운 층에 그린다 (카메라에 따라 시차로 움직인다)
 function decorate(name, prog, par) {
@@ -257,13 +259,13 @@ function decorate(name, prog, par) {
 function drawTerrain(th) {
   const L0 = G.level; ctx.fillStyle = th.body[0]; let open = false, firstX = 0;
   const flush = (endX) => {
-    if (!open) return; ctx.lineTo(endX, VH + 2); ctx.lineTo(firstX, VH + 2); ctx.closePath();
-    const g = ctx.createLinearGradient(0, 70, 0, VH); g.addColorStop(0, th.body[0]); g.addColorStop(1, th.body[1]); ctx.fillStyle = g; ctx.fill(); open = false;
+    if (!open) return; ctx.lineTo(endX, VH + 700); ctx.lineTo(firstX, VH + 700); ctx.closePath();
+    const g = ctx.createLinearGradient(0, 70, 0, VH + 300); g.addColorStop(0, th.body[0]); g.addColorStop(1, th.body[1]); ctx.fillStyle = g; ctx.fill(); open = false;
   };
   for (let sx = 0; sx <= VW + 2; sx += 2) {
     const wx = Math.floor(camX) + sx, h = L.groundY(L0, wx);
     if (!Number.isFinite(h)) { flush(sx); continue; }
-    if (!open) { ctx.beginPath(); ctx.moveTo(sx, VH + 2); ctx.lineTo(sx, h); open = true; firstX = sx; } else ctx.lineTo(sx, h);
+    if (!open) { ctx.beginPath(); ctx.moveTo(sx, VH + 700); ctx.lineTo(sx, h); open = true; firstX = sx; } else ctx.lineTo(sx, h);
   }
   flush(VW + 2);
   // 겉면 띠와 격자(속도감)
@@ -271,7 +273,7 @@ function drawTerrain(th) {
     const wx = Math.floor(camX) + sx, h = L.groundY(L0, wx); if (!Number.isFinite(h)) continue;
     const ice = L0.ice.some((r) => wx >= r.x0 && wx <= r.x1);
     ctx.fillStyle = ice ? '#cfeeff' : th.top; ctx.fillRect(sx, h, 2, ice ? 6 : 5); if (ice && (Math.floor(wx / 14) + Math.floor(clock * 3)) % 5 === 0) { ctx.fillStyle = '#fff'; ctx.fillRect(sx, h + 1, 2, 2); }
-    if (Math.floor(wx / 32) % 2 === 0) { ctx.fillStyle = 'rgba(0,0,0,.10)'; ctx.fillRect(sx, h + 5, 2, VH - h); }
+    if (Math.floor(wx / 32) % 2 === 0) { ctx.fillStyle = 'rgba(0,0,0,.10)'; ctx.fillRect(sx, h + 5, 2, VH + 700 - h); }
   }
 }
 function drawRings() {
@@ -365,13 +367,15 @@ function render() {
   if (!G) { ctx.fillStyle = '#0a1420'; ctx.fillRect(0, 0, VW, VH); return; }
   const th = THEMES[G.level.theme], sx = shake > 0 ? (Math.random() - 0.5) * shake : 0, sy = shake > 0 ? (Math.random() - 0.5) * shake : 0; if (shake > 0) shake *= 0.85; if (shake < 0.3) shake = 0;
   ctx.save(); ctx.translate(sx, sy);
-  drawBackground(th); drawTerrain(th); drawObjects(); drawRings();
+  drawBackground(th);
+  ctx.save(); ctx.translate(0, -camY);                                                 // 세계(땅·장치·적·캐릭터·효과)는 세로 카메라만큼 움직인다
+  drawTerrain(th); drawObjects(); drawRings();
   for (const e of G.enemies) if (e.alive || false) drawEnemy(e);
   if (G.phase !== 'dying' || G.p.y < VH + 60) drawPlayer();
   for (let i = fx.length - 1; i >= 0; i--) { const f = fx[i]; f.t++; f.x += f.vx; f.y += f.vy; f.vy += 0.12; if (f.t > f.life) { fx.splice(i, 1); continue; } ctx.globalAlpha = 1 - f.t / f.life; ctx.fillStyle = f.color; ctx.beginPath(); ctx.arc(f.x - camX, f.y, 2.4, 0, 6.283); ctx.fill(); }
   ctx.globalAlpha = 1; ctx.textAlign = 'center'; ctx.font = '900 11px -apple-system, sans-serif';
   for (let i = floats.length - 1; i >= 0; i--) { const f = floats[i]; f.t++; if (f.t > 50) { floats.splice(i, 1); continue; } ctx.globalAlpha = f.t > 36 ? (50 - f.t) / 14 : 1; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.fillStyle = '#ffe27a'; const y = f.y - f.t * 0.6; ctx.strokeText(f.text, f.x - camX, y); ctx.fillText(f.text, f.x - camX, y); }
-  ctx.globalAlpha = 1; ctx.restore();
+  ctx.globalAlpha = 1; ctx.restore(); ctx.restore();
   drawHud();
   if (G.phase === 'clear') {                                                       // 골 장면: 반짝이는 큰 글자와 별
     const k = Math.min(1, endT / 24), sc = 0.4 + 0.6 * (1 - Math.pow(1 - k, 3)) + Math.sin(clock * 6) * 0.03; ctx.save(); ctx.translate(VW / 2, 70); ctx.scale(sc, sc); ctx.globalAlpha = k;
@@ -388,6 +392,9 @@ function tick() {
   const ev = L.step(G, readInput()) || G.events; handle(G.events);
   const p = G.p, target = Math.max(0, Math.min(G.level.len - VW, p.x - 110 + Math.max(-30, Math.min(70, (p.ground ? p.gsp : p.vx) * 9))));
   camX += (target - camX) * (G.phase === 'dying' ? 0 : 0.14); if (Math.abs(target - camX) > 160) camX = target;
+  // 세로 카메라: 캐릭터가 화면 가운데 여유 구간(위 50 ~ 아래 175)을 벗어나면 부드럽게 따라간다. 여유 구간 안에서는 원래 위치(0)로 돌아온다
+  const tY = L.camTargetY(p.y);
+  camY += (tY - camY) * (tY < camY ? 0.22 : 0.1); if (Math.abs(camY) < 0.05) camY = 0;
   if (G.phase === 'clear') { endT++; if (endT % 7 === 0) burst(G.p.x + (Math.random() - 0.5) * 120, G.p.y - 50 - Math.random() * 50, ['#ffd23a', '#ff6a8a', '#6ad8ff', '#9aff7a'][Math.floor(Math.random() * 4)], 12, 3); if (endT === 1) sfx.clear(); if (endT > 170 && screen === 'play') showClear(); }
   if (G.phase === 'over' && screen === 'play') showOver();
 }
@@ -399,5 +406,5 @@ function frame(now) {
 showTitle(); resize(); requestAnimationFrame(frame); setTimeout(resize, 60);
 
 /* @test-hooks:start */
-window.__sp = { get G() { return G; }, get screen() { return screen; }, get unlocked() { return unlocked; }, get best() { return best; }, get pad() { return pad; }, get camX() { return camX; }, L, tick, render, startZone, setG(g) { G = g; }, get paused() { return paused; }, setPaused, pressJump: () => { jumpEdge = true; } };
+window.__sp = { get camY() { return camY; }, get G() { return G; }, get screen() { return screen; }, get unlocked() { return unlocked; }, get best() { return best; }, get pad() { return pad; }, get camX() { return camX; }, L, tick, render, startZone, setG(g) { G = g; }, get paused() { return paused; }, setPaused, pressJump: () => { jumpEdge = true; } };
 /* @test-hooks:end */

@@ -265,3 +265,10 @@ test('a boost pad gives enough speed to cross the longest gap from the ramp, and
   const fast = mk(10); let landed = false; for (let i = 0; i < 300 && fast.phase === 'play' && !landed; i++) { L.step(fast, { right: true }); if (fast.p.x > 1200 && fast.p.ground) landed = true; } assert.ok(landed, 'a fast run clears a 200 pixel gap');
   const slow = mk(3); for (let i = 0; i < 400 && slow.phase === 'play' && slow.deaths === 0; i++) L.step(slow, { right: true }); assert.ok(slow.deaths >= 1, 'a slow run falls in');
 });
+
+test('the vertical camera stays put on normal ground and follows high jumps and falls so the player stays on screen', () => {
+  for (const y of [78, 100, 150, 168]) assert.strictEqual(L.camTargetY(y), 0, 'normal ground heights need no camera move: ' + y);
+  assert.ok(L.camTargetY(-65) < -100, 'a spring bounce far above the top: ' + L.camTargetY(-65)); assert.ok(L.camTargetY(260) > 60, 'falling far below');
+  for (const y of [-300, -65, 0, 20, 60, 150, 170, 190, 260, 400]) { const sy = y - L.camTargetY(y); assert.ok(sy - 12 >= L.CAM_TOP - 0.01 && sy - 12 <= L.CAM_BOTTOM + 0.01, 'the player stays inside the window at ' + y + ' -> ' + sy); }
+  let prev = L.camTargetY(-300); for (let y = -299; y < 400; y++) { const c = L.camTargetY(y); assert.ok(c >= prev - 1e-9 && c - prev <= 1.0001, 'smooth and monotonic'); prev = c; }
+});

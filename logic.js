@@ -328,7 +328,11 @@ const LOGIC_SP = (() => {
     emit(st, { t: 'clear', timeBonus: st.timeBonus, ringBonus: st.ringBonus, secs });
   }
 
-  return { VW, VH, ACC, DEC, FRC, TOP, SLOPE, GRAV, JUMP, MAX_GSP, SPRING_V, PAD_V, INVULN, GROUND_REF, Y_MIN, Y_MAX, PIT_LIMIT, ZONES, TIME_PAR, START_LIVES,
+  // 세로 카메라가 가려는 곳: 캐릭터(몸 중심 py-12)가 화면 위 50 ~ 아래 175 안에 있으면 0, 벗어나면 그만큼 따라간다
+  const CAM_TOP = 50, CAM_BOTTOM = 175;
+  function camTargetY(py) { const wy = py - 12; return wy < CAM_TOP ? wy - CAM_TOP : wy > CAM_BOTTOM ? wy - CAM_BOTTOM : 0; }
+
+  return { CAM_TOP, CAM_BOTTOM, camTargetY, VW, VH, ACC, DEC, FRC, TOP, SLOPE, GRAV, JUMP, MAX_GSP, SPRING_V, PAD_V, INVULN, GROUND_REF, Y_MIN, Y_MAX, PIT_LIMIT, ZONES, TIME_PAR, START_LIVES,
     BELT_V, LOOP_R, LOOP_W, LOOP_MIN, SCATTER_MAX, CHAIN_POINTS, LIFE_RINGS, DASH_BASE, SHOES_TIME, INVINC_TIME, rng, buildLevel, groundY, angleAt, newGame, spawn, step, isSpin, canKill, pbox };
 })();
 if (typeof module !== 'undefined') module.exports = LOGIC_SP;

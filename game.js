@@ -64,7 +64,7 @@ function resize() {
 addEventListener('resize', resize); addEventListener('orientationchange', () => setTimeout(resize, 150));
 
 // ---------- 입력 ----------
-const keys = new Set(), pad = { left: false, right: false, down: false, up: false, jumpBtn: false };
+const keys = new Set(), pad = { left: false, right: false, down: false, jumpBtn: false };
 let jumpEdge = false;
 const KEY = { left: ['ArrowLeft', 'a', 'A'], right: ['ArrowRight', 'd', 'D'], down: ['ArrowDown', 's', 'S'], jump: [' ', 'z', 'Z', 'ArrowUp', 'w', 'W'] };
 const heldAny = (list) => list.some((k) => keys.has(k));
@@ -79,13 +79,13 @@ addEventListener('keydown', (e) => {
   keys.add(e.key);
 });
 addEventListener('keyup', (e) => keys.delete(e.key));
-function releaseAll() { keys.clear(); pad.left = pad.right = pad.down = pad.up = pad.jumpBtn = false; jumpEdge = false; stick.on = false; padPtr = null; stickDraw(); $('jumpBtn').classList.remove('on'); }
+function releaseAll() { keys.clear(); pad.left = pad.right = pad.down = pad.jumpBtn = false; jumpEdge = false; stick.on = false; padPtr = null; stickDraw(); $('jumpBtn').classList.remove('on'); }
 // 점프 버튼
 const jb = $('jumpBtn');
 jb.addEventListener('pointerdown', (e) => { e.preventDefault(); try { jb.setPointerCapture(e.pointerId); } catch (err) { /* 무시 */ } pad.jumpBtn = true; jumpEdge = true; jb.classList.add('on'); });
 for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) jb.addEventListener(t, () => { pad.jumpBtn = false; jb.classList.remove('on'); });
-// 떠 있는 조이스틱: 왼쪽 칸 어디든 대면 그 자리가 중심. 좌우로 밀면 달리고, 아래로 밀면 구르고, 위로 밀면 점프
-const stickEl = $('stick'), STICK = { dead: 9, reach: 24, down: 16, up: 16 }, stick = { ax: 0, ay: 0, x: 0, y: 0, on: false };
+// 떠 있는 조이스틱: 왼쪽 칸 어디든 대면 그 자리가 중심. 좌우로 밀면 달리고, 아래로 밀면 구른다 (점프는 오른쪽 큰 버튼)
+const stickEl = $('stick'), STICK = { dead: 9, reach: 24, down: 16 }, stick = { ax: 0, ay: 0, x: 0, y: 0, on: false };
 let padPtr = null;
 function stickDraw() {
   const base = $('stickBase'), knob = $('stickKnob'), hint = $('stickHint');
@@ -100,15 +100,14 @@ function stickMove(e) {
   if (Math.abs(dx) > STICK.reach) { stick.ax += dx - Math.sign(dx) * STICK.reach; stick.ax = Math.max(28, Math.min(r.width - 28, stick.ax)); dx = stick.x - stick.ax; }
   const dy = stick.y - stick.ay, down = dy > STICK.down && dy > Math.abs(dx) * 0.8;
   pad.down = down; pad.left = !down && dx < -STICK.dead; pad.right = !down && dx > STICK.dead;
-  const up = dy < -STICK.up; if (up && !pad.up) jumpEdge = true; pad.up = up;
   stickDraw();
 }
 stickEl.addEventListener('pointerdown', (e) => { e.preventDefault(); padPtr = e.pointerId; try { stickEl.setPointerCapture(e.pointerId); } catch (err) { /* 무시 */ } const r = stickEl.getBoundingClientRect(); stick.on = true; stick.ax = Math.max(28, Math.min(r.width - 28, e.clientX - r.left)); stick.ay = Math.max(28, Math.min(r.height - 28, e.clientY - r.top)); stickMove(e); });
 stickEl.addEventListener('pointermove', (e) => { if (e.pointerId === padPtr) stickMove(e); });
-const stickUp = (e) => { if (e.pointerId === padPtr) { padPtr = null; pad.left = pad.right = pad.down = pad.up = false; stick.on = false; stickDraw(); } };
+const stickUp = (e) => { if (e.pointerId === padPtr) { padPtr = null; pad.left = pad.right = pad.down = false; stick.on = false; stickDraw(); } };
 stickEl.addEventListener('pointerup', stickUp); stickEl.addEventListener('pointercancel', stickUp); stickEl.addEventListener('lostpointercapture', stickUp);
 const readInput = () => {
-  const inp = { left: heldAny(KEY.left) || pad.left, right: heldAny(KEY.right) || pad.right, down: heldAny(KEY.down) || pad.down, jump: jumpEdge, jumpHeld: heldAny(KEY.jump) || pad.jumpBtn || pad.up };
+  const inp = { left: heldAny(KEY.left) || pad.left, right: heldAny(KEY.right) || pad.right, down: heldAny(KEY.down) || pad.down, jump: jumpEdge, jumpHeld: heldAny(KEY.jump) || pad.jumpBtn };
   jumpEdge = false; return inp;
 };
 

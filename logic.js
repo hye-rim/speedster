@@ -10,6 +10,9 @@ const LOGIC_SP = (() => {
   const GROUND_REF = 150, Y_MIN = 78, Y_MAX = 168;            // 코스 땅 높이의 기준과 한계
   const PIT_LIMIT = 110;                                      // 구멍 폭 최대 (느리게 달려도 점프로 넘는다)
   const RING_R = 13, ENEMY_POINTS = 100, RING_POINTS = 10, START_LIVES = 3;
+  const SCATTER_MAX = 32, CHAIN_POINTS = [100, 200, 500, 1000], LIFE_RINGS = 100;      // 맞으면 링이 최대 32개 흩어짐 · 연속 처치 점수 · 링 100개마다 목숨 하나
+  const DASH_BASE = 8, DASH_MAX_CHARGE = 8, SHOES_TIME = 20 * 60, INVINC_TIME = 15 * 60;   // 스핀 대시 · 신발·무적 시간
+  const LOOP_R = 40, LOOP_W = 36, LOOP_MIN = 5;                                              // 루프: 반지름·폭, 이 속도 이상으로 들어가야 한 바퀴 돈다
   const TIME_PAR = [75, 90, 105, 120];                          // 이 시간(초) 안에 끝내면 시간 보너스
   const ZONES = [
     { name: '초원 언덕', theme: 'grass', len: 16000, pit: 0.10, enemy: 0.30, spike: 0.00, hill: 46 },
@@ -27,7 +30,7 @@ const LOGIC_SP = (() => {
   function buildLevel(zone, seed) {
     const Z = ZONES[zone], rnd = rng(seed * 977 + zone * 31 + 7), len = Z.len;
     const H = new Float32Array(len + 1).fill(Infinity);
-    const L = { zone, name: Z.name, theme: Z.theme, len, H, rings: [], enemies: [], springs: [], pads: [], spikes: [], checks: [], goalX: len - 260 };
+    const L = { zone, name: Z.name, theme: Z.theme, len, H, rings: [], enemies: [], springs: [], pads: [], spikes: [], checks: [], monitors: [], loops: [], goalX: len - 260 };
     let x = 0, y = GROUND_REF;
     const smooth = (x0, y0, x1, y1) => { for (let i = x0; i <= x1 && i <= len; i++) { const t = (i - x0) / Math.max(1, x1 - x0), s = t * t * (3 - 2 * t); H[i] = y0 + (y1 - y0) * s; } };
     const flat = (n) => { smooth(x, y, x + n, y); const a = x; x += n; return [a, x]; };
@@ -37,6 +40,16 @@ const LOGIC_SP = (() => {
     for (let i = 150; i <= 390; i += 40) L.rings.push({ x: i, y: GROUND_REF - 22 });                  // 처음 평지에 링 몇 개(처음 해 보는 사람이 링을 먹어 볼 수 있게)
     let nextCheck = 1;
     while (x < len - 700) {
+      const q = rnd();
+      if (q < 0.10 && x > 900) {                                  // 루프: 앞에 달릴 평지, 루프, 뒤에 평지. 링이 원을 따라 놓인다
+        flat(300); const lx = x; flat(LOOP_W + 140); L.loops.push({ x: lx, y: y });
+        for (let k = 1; k <= 10; k++) { const th = k / 11 * Math.PI * 2; L.rings.push({ x: lx + LOOP_R * Math.sin(th) + LOOP_W * th / (Math.PI * 2), y: y - LOOP_R * (1 - Math.cos(th)) - 10 }); }
+        continue;
+      }
+      if (q < 0.18 && x > 700) {                                  // 아이템 상자
+        const [a, b] = flat(240); const kinds = zone === 0 ? ['ring10', 'shield'] : ['ring10', 'ring10', 'shield', 'shield', 'shoes', 'invincible', 'life'];
+        L.monitors.push({ x: a + 110, type: kinds[Math.floor(rnd() * kinds.length)] }); ringsLine(a, b); continue;
+      }
       const r = rnd();
       if (L.checks.length < 2 && x > len * nextCheck / 3) { const [a, b] = flat(160); L.checks.push({ x: a + 80 }); nextCheck++; continue; }
       if (r < Z.pit) {                                           // 구멍: 앞은 평평하게, 구멍 위에 링 곡선
@@ -80,7 +93,7 @@ const LOGIC_SP = (() => {
     const zone = clamp(opts.zone | 0, 0, ZONES.length - 1), level = buildLevel(zone, opts.seed == null ? 1 : opts.seed);
     const st = {
       zone, level, lives: opts.lives || START_LIVES, score: opts.score | 0, rings: 0, ringsTotal: 0, t: 0, events: [], phase: 'play', tutorial: !!opts.tutorial,
-      checkX: 60, deaths: 0, kills: 0, spring: 0, maxSpeed: 0,
+      checkX: 60, deaths: 0, kills: 0, spring: 0, maxSpeed: 0, chain: 0, nextLife: LIFE_RINGS, mon: new Set(), loopsRun: 0, monitorsBroken: 0,
       enemies: [], clearT: 0, dyingT: 0, scatter: [], got: new Set(),
     };
     st.enemies = level.enemies.map((e, i) => ({ id: i, type: e.type, x: e.x, y: e.y, home: e.home, range: e.range, dir: i % 2 ? 1 : -1, alive: true, vy: 0 }));
@@ -90,10 +103,18 @@ const LOGIC_SP = (() => {
   }
   function spawn(st, x) {
     const L = st.level;
-    st.p = { x, y: groundY(L, x), vx: 0, vy: 0, gsp: 0, ground: true, spin: false, roll: false, face: 1, inv: 60, dead: false, jumping: false, jumpHeld: false, hurt: 0, moved: false };
+    st.p = { x, y: groundY(L, x), vx: 0, vy: 0, gsp: 0, ground: true, spin: false, roll: false, face: 1, inv: 60, dead: false, jumping: false, jumpHeld: false, hurt: 0, moved: false, crouch: false, charge: 0, dashRoll: false, shield: false, invinc: 0, shoes: 0, loop: null };
   }
 
   const isSpin = (p) => p.roll || (!p.ground && p.jumping);
+  const canKill = (p) => isSpin(p) || p.invinc > 0 || !!p.loop;                  // 무적이거나 루프를 도는 중에는 닿기만 해도 적을 부순다
+
+  // 링을 n 개 얻는다: 점수는 줄 때만, 100개를 넘을 때마다 목숨 하나
+  function addRings(st, n, silent, scattered) {
+    st.rings += n; if (!scattered) { st.ringsTotal += n; st.score += n * RING_POINTS; }
+    if (!silent) emit(st, { t: 'ring' });
+    while (st.rings >= st.nextLife) { st.nextLife += LIFE_RINGS; st.lives++; emit(st, { t: 'oneup' }); }
+  }
 
   // ---------- 한 걸음 ----------
   function step(st, input = {}) {
@@ -103,13 +124,13 @@ const LOGIC_SP = (() => {
     if (st.phase === 'dying') {
       p.vy = Math.min(MAX_FALL, p.vy + GRAV); p.y += p.vy; st.dyingT--;
       if (st.dyingT <= 0) {
-        if (st.lives <= 0) { st.phase = 'over'; emit(st, { t: 'over' }); } else { spawn(st, st.checkX); st.phase = 'play'; st.rings = 0; emit(st, { t: 'respawn' }); }
+        if (st.lives <= 0) { st.phase = 'over'; emit(st, { t: 'over' }); } else { spawn(st, st.checkX); st.phase = 'play'; st.rings = 0; st.nextLife = LIFE_RINGS; emit(st, { t: 'respawn' }); }
       }
       return;
     }
     if (st.phase === 'clear') { st.clearT++; p.gsp *= 0.97; p.x += p.gsp; p.y = groundY(L, p.x); return; }
     st.t++;
-    if (p.inv > 0) p.inv--;
+    if (p.inv > 0) p.inv--; if (p.shoes > 0) p.shoes--; if (p.invinc > 0) { p.invinc--; if (p.invinc === 0) emit(st, { t: 'powerend' }); }
     const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
     if (p.ground) stepGround(st, input, dir); else stepAir(st, input, dir);
     p.jumpHeld = !!input.jumpHeld || !!input.jump;
@@ -122,18 +143,36 @@ const LOGIC_SP = (() => {
     if (st.phase === 'play' && p.x >= L.goalX) clearLevel(st);
   }
 
+  function stepLoop(st) {                                          // 루프를 도는 중: 원을 따라 한 바퀴. 속도는 그대로
+    const p = st.p, lp = p.loop; lp.th += Math.abs(p.gsp) / LOOP_R;
+    if (lp.th >= Math.PI * 2) { p.x = lp.x0 + LOOP_W; p.y = groundY(st.level, p.x); p.loop = null; st.loopsRun++; emit(st, { t: 'loopdone' }); return; }
+    p.x = lp.x0 + LOOP_R * Math.sin(lp.th) + LOOP_W * lp.th / (Math.PI * 2); p.y = lp.y0 - LOOP_R * (1 - Math.cos(lp.th)); p.roll = false; p.vx = p.gsp; p.vy = 0;
+  }
   function stepGround(st, input, dir) {
     const L = st.level, p = st.p;
+    if (p.loop) { stepLoop(st); return; }
+    const k = p.shoes > 0 ? 2 : 1, TOPK = TOP * k, ACCK = ACC * k, DECK = DEC * k, FRCK = FRC * k;                     // 신발을 신으면 최고 속도·가속이 두 배
+    // 스핀 대시: 서 있을 때 ↓ 로 웅크리고, 웅크린 채 점프 버튼을 누를 때마다 힘이 모인다. ↓ 를 놓으면 그 힘으로 굴러 나간다
+    if (input.down && Math.abs(p.gsp) < 0.5 && !p.roll) {
+      p.crouch = true; p.gsp = 0; if (dir) p.face = dir;
+      if (input.jump) { p.charge = Math.min(DASH_MAX_CHARGE, p.charge + 2); emit(st, { t: 'rev', charge: p.charge }); }
+      p.charge *= 0.985; return;
+    }
+    if (p.crouch) {
+      p.crouch = false;
+      if (p.charge >= 1) { p.gsp = p.face * (DASH_BASE + Math.floor(p.charge) / 2); p.roll = true; p.dashRoll = true; emit(st, { t: 'spindash', gsp: p.gsp }); }
+      p.charge = 0;
+    }
     const ang = angleAt(L, p.x), sn = Math.sin(ang), cs = Math.cos(ang);
     // 굴러가기(↓): 달리다 아래를 누르면 몸을 말아 굴러간다. 느려지면 풀린다
     if (input.down && Math.abs(p.gsp) >= 1 && !p.roll) { p.roll = true; emit(st, { t: 'roll' }); }
-    if (p.roll && (Math.abs(p.gsp) < 0.5 || !input.down)) p.roll = false;                         // ↓ 를 누르고 있는 동안만 구른다(떼면 속도는 그대로 달리기로)
+    if (p.roll && (Math.abs(p.gsp) < (p.dashRoll ? 1.5 : 0.5) || (!input.down && !p.dashRoll))) { p.roll = false; p.dashRoll = false; }   // ↓ 를 누르고 있는 동안만 구른다(떼면 속도는 그대로 달리기로). 스핀 대시로 나간 구르기는 느려질 때까지 계속
     if (!p.roll) {
       if (dir) {
-        if (p.gsp * dir < 0) { p.gsp += dir * DEC; if (p.gsp * dir > 0) p.gsp = dir * 0.5; }               // 반대로 꺾으면 브레이크
-        else if (Math.abs(p.gsp) < TOP) p.gsp = clamp(p.gsp + dir * ACC, -TOP, TOP);
+        if (p.gsp * dir < 0) { p.gsp += dir * DECK; if (p.gsp * dir > 0) p.gsp = dir * 0.5; }               // 반대로 꺾으면 브레이크
+        else if (Math.abs(p.gsp) < TOPK) p.gsp = clamp(p.gsp + dir * ACCK, -TOPK, TOPK);
         p.face = dir;
-      } else p.gsp = Math.abs(p.gsp) <= FRC ? 0 : p.gsp - Math.sign(p.gsp) * FRC;
+      } else p.gsp = Math.abs(p.gsp) <= FRCK ? 0 : p.gsp - Math.sign(p.gsp) * FRCK;
       p.gsp -= SLOPE * sn;                                                                                // 경사: 오르막은 느려지고 내리막은 빨라진다
     } else {
       if (dir && p.gsp * dir < 0) p.gsp += dir * ROLL_DEC;
@@ -145,20 +184,21 @@ const LOGIC_SP = (() => {
     // 점프
     if (input.jump) {
       p.vx = p.gsp * cs - JUMP * sn; p.vy = -p.gsp * sn - JUMP * cs;
-      p.ground = false; p.jumping = true; p.roll = false; emit(st, { t: 'jump' }); return;
+      p.ground = false; p.jumping = true; p.roll = false; p.dashRoll = false; emit(st, { t: 'jump' }); return;
     }
     // 땅을 따라 간다. 땅이 갑자기 사라지거나 크게 낮아지면(점프대·낭떠러지) 속도를 그대로 가진 채 날아간다
     const nx = p.x + p.gsp * cs, gy = groundY(L, nx);
     if (!Number.isFinite(gy) || gy - p.y > 6 + Math.abs(p.gsp) * Math.abs(Math.tan(ang)) + 3) {
       p.x = nx; p.vx = p.gsp * cs; p.vy = -p.gsp * sn; p.ground = false; p.jumping = false; p.roll = false; emit(st, { t: 'air' }); return;
     }
-    p.x = nx; p.y = gy;
+    const px0 = p.x; p.x = nx; p.y = gy;
+    if (p.gsp >= LOOP_MIN) for (const lp of L.loops) if (px0 < lp.x && p.x >= lp.x) { p.x = lp.x; p.y = lp.y; p.loop = { x0: lp.x, y0: lp.y, th: 0 }; p.roll = false; p.dashRoll = false; emit(st, { t: 'loop' }); break; }      // 빠르게 들어가면 한 바퀴
     if (p.x < 8) { p.x = 8; p.gsp = Math.max(0, p.gsp); }
   }
 
   function stepAir(st, input, dir) {
-    const L = st.level, p = st.p;
-    if (dir) { if (dir * p.vx < TOP) p.vx = clamp(p.vx + dir * AIR_ACC, -Math.max(TOP, Math.abs(p.vx)), Math.max(TOP, Math.abs(p.vx))); p.face = dir; }
+    const L = st.level, p = st.p, TOPK = TOP * (p.shoes > 0 ? 2 : 1);
+    if (dir) { if (dir * p.vx < TOPK) p.vx = clamp(p.vx + dir * AIR_ACC, -Math.max(TOPK, Math.abs(p.vx)), Math.max(TOPK, Math.abs(p.vx))); p.face = dir; }
     if (p.vy < 0 && p.vy > -4) p.vx *= 0.96875;
     if (p.jumping && p.vy < -JUMP_CUT && !(input.jumpHeld || input.jump)) p.vy = -JUMP_CUT;      // 버튼을 일찍 떼면 낮은 점프
     p.vy = Math.min(MAX_FALL, p.vy + GRAV);
@@ -170,7 +210,7 @@ const LOGIC_SP = (() => {
       p.y = gy; p.ground = true;
       const ang = angleAt(L, p.x), sn = Math.sin(ang), cs = Math.cos(ang);
       p.gsp = clamp(p.vx * cs - p.vy * sn, -MAX_GSP, MAX_GSP);
-      p.jumping = false; p.roll = !!input.down && Math.abs(p.gsp) >= 1; p.vy = 0; p.hurt = 0;
+      p.jumping = false; p.roll = !!input.down && Math.abs(p.gsp) >= 1; p.vy = 0; p.hurt = 0; st.chain = 0;
       emit(st, { t: 'land' });
     }
   }
@@ -181,7 +221,7 @@ const LOGIC_SP = (() => {
 
   function stepScatter(st) {
     const p = st.p;
-    for (const s of st.scatter) { s.vy += 0.15; s.x += s.vx; s.y += s.vy; s.life--; const gy = groundY(st.level, s.x); if (s.y > gy && s.vy > 0) { s.y = gy; s.vy *= -0.6; } if (s.life < 240 && Math.hypot(s.x - p.x, s.y - (p.y - 12)) < RING_R && p.inv < 100) { s.life = 0; st.rings++; emit(st, { t: 'ring' }); } }
+    for (const s of st.scatter) { s.vy += 0.15; s.x += s.vx; s.y += s.vy; s.life--; const gy = groundY(st.level, s.x); if (s.y > gy && s.vy > 0) { s.y = gy; s.vy *= -0.6; } if (s.life < 240 && Math.hypot(s.x - p.x, s.y - (p.y - 12)) < RING_R && p.inv < 100) { s.life = 0; addRings(st, 1, false, true); } }
     st.scatter = st.scatter.filter((s) => s.life > 0);
   }
   function stepEnemies(st) {
@@ -193,7 +233,7 @@ const LOGIC_SP = (() => {
       else { e.x += e.dir * 0.8; if (Math.abs(e.x - e.home) > e.range * 1.4) e.dir = -e.dir; e.y = groundY(L, e.home) - 34 + Math.sin(st.t / 20 + e.id) * 8; }
       const eb = { x: e.x - 8, y: e.y - 14, w: 16, h: 14 };
       if (p.dead || !overlap(pbox(p), eb)) continue;
-      if (isSpin(p)) { e.alive = false; st.kills++; st.score += ENEMY_POINTS; emit(st, { t: 'kill', x: e.x, y: e.y }); if (!p.ground) p.vy = p.vy > 0 ? -4 : p.vy + 1; }
+      if (canKill(p)) { e.alive = false; st.kills++; const pts = CHAIN_POINTS[Math.min(st.chain, CHAIN_POINTS.length - 1)]; st.chain++; st.score += pts; emit(st, { t: 'kill', x: e.x, y: e.y, pts }); if (!p.ground) p.vy = p.vy > 0 ? -4 : p.vy + 1; }
       else hurt(st, e.x);
     }
   }
@@ -201,21 +241,31 @@ const LOGIC_SP = (() => {
     const L = st.level, p = st.p, bx = pbox(p);
     for (let i = 0; i < L.rings.length; i++) {
       const r = L.rings[i]; if (st.got.has(i)) continue;
-      if (Math.abs(r.x - p.x) < RING_R + 7 && Math.abs(r.y - (p.y - 12)) < RING_R + 7 && Math.hypot(r.x - p.x, r.y - (p.y - 12)) < RING_R + 5) { st.got.add(i); st.rings++; st.ringsTotal++; st.score += RING_POINTS; emit(st, { t: 'ring' }); }
+      if (Math.abs(r.x - p.x) < RING_R + 7 && Math.abs(r.y - (p.y - 12)) < RING_R + 7 && Math.hypot(r.x - p.x, r.y - (p.y - 12)) < RING_R + 5) { st.got.add(i); addRings(st, 1); }
     }
     for (const s of L.springs) if (Math.abs(s.x - p.x) < 12 && p.y > groundY(L, s.x) - 10 && p.y <= groundY(L, s.x) + 6 && (p.vy >= 0 || p.ground)) { p.vy = -SPRING_V; p.vx = clamp(p.ground ? p.gsp * Math.cos(angleAt(L, p.x)) : p.vx, -TOP, TOP); p.ground = false; p.jumping = false; p.roll = false; st.spring++; emit(st, { t: 'spring' }); }
     for (const d of L.pads) if (p.ground && Math.abs(d.x - p.x) < 14) { p.gsp = d.dir * PAD_V; p.roll = false; emit(st, { t: 'boost' }); }
     for (const k of L.spikes) if (Math.abs(k.x - p.x) < 9 && p.y > groundY(L, k.x) - 12) hurt(st, k.x);
+    for (let i = 0; i < L.monitors.length; i++) {                                   // 아이템 상자: 구르거나 뛰어서(또는 무적일 때) 닿으면 부서진다. 그냥 걸어서 지나가면 아무 일 없다
+      const m = L.monitors[i]; if (st.mon.has(i) || !canKill(p)) continue;
+      if (overlap(pbox(p), { x: m.x - 9, y: groundY(L, m.x) - 22, w: 18, h: 22 })) {
+        st.mon.add(i); st.monitorsBroken++; st.score += 10; if (!p.ground) p.vy = p.vy > 0 ? -4 : p.vy + 1;
+        if (m.type === 'ring10') addRings(st, 10); else if (m.type === 'shield') p.shield = true; else if (m.type === 'invincible') p.invinc = INVINC_TIME; else if (m.type === 'shoes') p.shoes = SHOES_TIME; else if (m.type === 'life') { st.lives++; emit(st, { t: 'oneup' }); }
+        emit(st, { t: 'monitor', type: m.type, x: m.x, y: groundY(L, m.x) });
+      }
+    }
     for (const c of L.checks) if (c.x > st.checkX && p.x >= c.x) { st.checkX = c.x; emit(st, { t: 'check', x: c.x }); }
   }
   function hurt(st, fromX) {
     const p = st.p;
     if (p.inv > 0 || p.dead || st.phase !== 'play') return;
+    if (p.invinc > 0 || p.loop) return;                                              // 무적이거나 루프를 도는 중에는 안 다친다
+    if (p.shield) { p.shield = false; p.inv = INVULN; p.vx = (p.x < fromX ? -1 : 1) * HURT_VX; p.vy = HURT_VY; p.ground = false; p.jumping = false; p.roll = false; p.dashRoll = false; emit(st, { t: 'shieldbreak' }); return; }   // 보호막은 한 번 막아 준다 (링은 그대로)
     if (st.tutorial) { p.inv = INVULN; p.vx = (p.x < fromX ? -1 : 1) * HURT_VX; p.vy = HURT_VY; p.ground = false; p.jumping = false; p.roll = false; emit(st, { t: 'hurt', rings: 0 }); return; }
     if (st.rings <= 0) return die(st, 'enemy');
-    const n = Math.min(st.rings, 12);
+    const n = Math.min(st.rings, SCATTER_MAX);
     for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; st.scatter.push({ x: p.x, y: p.y - 14, vx: Math.cos(a) * 2.2, vy: -2.5 + Math.sin(a) * 1.6, life: 260 }); }
-    emit(st, { t: 'hurt', rings: st.rings }); st.rings = 0;
+    emit(st, { t: 'hurt', rings: st.rings }); st.rings = 0; st.nextLife = LIFE_RINGS;
     p.inv = INVULN; p.vx = (p.x < fromX ? -1 : 1) * HURT_VX; p.vy = HURT_VY; p.ground = false; p.jumping = false; p.roll = false; p.hurt = 1;
   }
   function die(st, why) {
@@ -231,6 +281,6 @@ const LOGIC_SP = (() => {
   }
 
   return { VW, VH, ACC, DEC, FRC, TOP, SLOPE, GRAV, JUMP, MAX_GSP, SPRING_V, PAD_V, INVULN, GROUND_REF, Y_MIN, Y_MAX, PIT_LIMIT, ZONES, TIME_PAR, START_LIVES,
-    rng, buildLevel, groundY, angleAt, newGame, spawn, step, isSpin, pbox };
+    LOOP_R, LOOP_W, LOOP_MIN, SCATTER_MAX, CHAIN_POINTS, LIFE_RINGS, DASH_BASE, SHOES_TIME, INVINC_TIME, rng, buildLevel, groundY, angleAt, newGame, spawn, step, isSpin, canKill, pbox };
 })();
 if (typeof module !== 'undefined') module.exports = LOGIC_SP;

@@ -5,23 +5,29 @@
 const L = require('../logic.js');
 function clone(st) { return { ...st, p: { ...st.p }, enemies: st.enemies.map((e) => ({ ...e })), scatter: st.scatter.map((s) => ({ ...s })), got: new Set(st.got), events: [] }; }
 const PLANS = [
-  { name: 'run', roll: 0, jump: false, hold: true },
-  { name: 'roll', roll: 50, jump: false, hold: true },
-  { name: 'jump', roll: 0, jump: true, hold: true },
-  { name: 'hop', roll: 0, jump: true, hold: false },
+  { name: 'run', roll: 0, jump: false, hold: true, delay: 0 },
+  { name: 'roll', roll: 50, jump: false, hold: true, delay: 0 },
+  { name: 'jump', roll: 0, jump: true, hold: true, delay: 0 },
+  { name: 'hop', roll: 0, jump: true, hold: false, delay: 0 },
+  { name: 'jump+8', roll: 0, jump: true, hold: true, delay: 8 },
+  { name: 'hop+8', roll: 0, jump: true, hold: false, delay: 8 },
+  { name: 'jump+16', roll: 0, jump: true, hold: true, delay: 16 },
+  { name: 'hop+16', roll: 0, jump: true, hold: false, delay: 16 },
+  { name: 'jump+28', roll: 0, jump: true, hold: true, delay: 28 },
+  { name: 'hop+28', roll: 0, jump: true, hold: false, delay: 28 },
 ];
 function rollout(st, plan, frames) {
   const c = clone(st); const lives0 = c.lives, rings0 = c.rings; let hurt = false;
   for (let i = 0; i < frames && c.phase === 'play'; i++) {
-    const first = i === 0;
-    L.step(c, { right: true, jump: first && plan.jump && c.p.ground, jumpHeld: plan.hold, down: i < plan.roll });
+    const jumpNow = plan.jump && i === plan.delay && c.p.ground;
+    L.step(c, { right: true, jump: jumpNow, jumpHeld: plan.hold && (i >= plan.delay || !plan.jump), down: i < plan.roll });
     if (c.events.some((e) => e.t === 'hurt')) hurt = true;
     if (c.phase === 'clear') break;
   }
   return { dead: c.lives < lives0 || c.phase === 'dying' || c.phase === 'over', hurt, x: c.p.x, ground: c.p.ground };
 }
 function play(zone, seed, opts = {}) {
-  const st = L.newGame({ zone, seed, lives: opts.lives || 99 }); let f = 0, hurts = 0, plan = PLANS[0], planLeft = 0;
+  const st = L.newGame({ zone, seed, lives: opts.lives || 99 }); let f = 0, hurts = 0, plan = PLANS[0], planLeft = 0, waitJump = -1;
   const maxF = 60 * (opts.maxSec || 400), frames = opts.frames || 100;
   while (st.phase !== 'clear' && st.phase !== 'over' && f < maxF) {
     f++;
@@ -34,10 +40,11 @@ function play(zone, seed, opts = {}) {
       if (hazard && planLeft <= 0) {
         let best = null;
         for (const pl of PLANS) { const r = rollout(st, pl, frames); const score = (r.dead ? -1e6 : 0) + (r.hurt ? -1e4 : 0) + r.x + (pl.name === 'run' ? 0.5 : 0); if (!best || score > best.score) best = { pl, score }; }
-        plan = best.pl; planLeft = plan.jump ? 4 : plan.roll ? plan.roll : 6; if (plan.jump) inp = { right: true, jump: true, jumpHeld: plan.hold }; else if (plan.roll) inp = { right: true, down: true };
+        plan = best.pl; planLeft = plan.jump ? plan.delay + 4 : plan.roll ? plan.roll : 6; waitJump = plan.jump ? plan.delay : -1; if (plan.roll) inp = { right: true, down: true };
       } else if (planLeft > 0 && plan.roll) inp = { right: true, down: true };
       else if (L.angleAt(st.level, p.x) < -0.12 && Math.abs(p.gsp) > 2) inp = { right: true, down: true };      // 내리막은 굴러서 더 빠르게
     } else if (!p.ground && p.jumping) inp = { right: true, jumpHeld: plan.hold };
+    if (waitJump >= 0 && st.phase === 'play' && p.ground) { if (waitJump === 0) { inp = { right: true, jump: true, jumpHeld: plan.hold }; waitJump = -1; } else waitJump--; }
     L.step(st, inp);
     for (const e of st.events) { if (e.t === 'hurt') hurts++; if (e.t === 'dead' && opts.onDeath) opts.onDeath({ x: Math.round(p.x), why: e.why, f, plan: plan.name }); }
   }

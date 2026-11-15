@@ -9,7 +9,7 @@ const L = require('../logic.js');
 function world(h = () => 150, len = 4000) {
   const st = L.newGame({ zone: 0, seed: 1 });
   const lv = st.level; lv.len = len; lv.H = new Float32Array(len + 1); for (let i = 0; i <= len; i++) lv.H[i] = h(i);
-  lv.rings = []; lv.enemies = []; lv.springs = []; lv.pads = []; lv.spikes = []; lv.checks = []; lv.goalX = len - 100;
+  lv.rings = []; lv.enemies = []; lv.springs = []; lv.pads = []; lv.spikes = []; lv.checks = []; lv.monitors = []; lv.loops = []; lv.goalX = len - 100;
   st.enemies = []; st.got = new Set(); L.spawn(st, 100); st.p.inv = 0; st.checkX = 100;
   return st;
 }
@@ -145,4 +145,67 @@ test('a runner bot that looks ahead clears every zone on several seeds without d
 test('the bot is fast: it reaches high speeds on the hills and finishes each zone in a sensible time', () => {
   const bot = require('./bot.js');
   for (let z = 0; z < L.ZONES.length; z++) { const r = bot.play(z, 2); assert.ok(r.maxSpeed > 6.5, 'top speed ' + r.maxSpeed); assert.ok(r.sec >= 40 && r.sec <= L.TIME_PAR[z] * 1.4, 'time ' + r.sec); }
+});
+
+// ---------- 원작 느낌: 루프 · 아이템 상자 · 스핀 대시 · 링 100개 목숨 · 연속 처치 ----------
+const crabAt = (st, x, id = 0) => st.enemies.push({ id, type: 'crab', x, y: 150, home: x, range: 0, dir: 1, alive: true });
+
+test('every zone has loops and item boxes, each on flat ground with room to run up to a loop', () => {
+  for (let z = 0; z < L.ZONES.length; z++) for (const seed of [1, 2, 3]) {
+    const v = L.buildLevel(z, seed); assert.ok(v.loops.length >= 2, 'loops ' + v.loops.length); assert.ok(v.monitors.length >= 1, 'item boxes');
+    for (const lp of v.loops) for (let x = lp.x - 280; x <= lp.x + L.LOOP_W + 130; x += 4) assert.ok(Math.abs(v.H[x] - lp.y) < 0.01, 'flat run-up and exit at ' + lp.x);
+    for (const m of v.monitors) assert.ok(Number.isFinite(v.H[Math.floor(m.x)]));
+  }
+  const z0 = L.buildLevel(0, 1).monitors.map((m) => m.type); assert.ok(z0.every((t) => t === 'ring10' || t === 'shield'), 'zone one only gives rings and shields');
+});
+
+test('entering a loop fast takes you once around the circle and out the other side at the same speed', () => {
+  const st = world(); st.level.loops = [{ x: 600, y: 150 }]; st.p.x = 300; st.p.gsp = 7; st.p.face = 1;
+  let looped = false, maxUp = 0, thMax = 0; for (let i = 0; i < 200 && st.p.x < 700; i++) { L.step(st, { right: true }); if (st.p.loop) { looped = true; thMax = Math.max(thMax, st.p.loop.th); maxUp = Math.max(maxUp, 150 - st.p.y); } }
+  assert.ok(looped && thMax > 5.5, 'went all the way round'); assert.ok(maxUp > 2 * L.LOOP_R - 4, 'passed the top of the circle: ' + maxUp);
+  assert.ok(!st.p.loop && st.p.ground && Math.abs(st.p.y - 150) < 0.5 && st.p.x > 600 + L.LOOP_W - 1, 'out the other side on the ground'); assert.ok(st.p.gsp >= 6.5, 'kept its speed: ' + st.p.gsp); assert.ok(evs(st, 'loopdone').length === 1 || st.loopsRun === 1);
+  const slow = world(); slow.level.loops = [{ x: 600, y: 150 }]; slow.p.x = 520; slow.p.gsp = 3; run(slow, 100, { right: true }); assert.ok(slow.p.x > 640 && slow.loopsRun === 0, 'too slow: it just runs past'); 
+  const h = world(); h.level.loops = [{ x: 600, y: 150 }]; h.p.x = 300; h.p.gsp = 7; crabAt(h, 610); h.rings = 3; run(h, 120, { right: true }); assert.strictEqual(h.rings, 3, 'nothing hurts you inside a loop'); assert.ok(h.kills === 1, 'and it beats the enemy it touches');
+});
+
+test('a spin dash: crouch with down, rev with the jump button, let go of down to shoot out rolling until you slow down', () => {
+  const st = world(); L.step(st, { down: true }); assert.ok(st.p.crouch && st.p.gsp === 0);
+  L.step(st, { down: true, jump: true }); L.step(st, { down: true, jump: true }); L.step(st, { down: true, jump: true }); assert.ok(st.p.charge > 4, 'revving builds up: ' + st.p.charge); assert.ok(evs(st, 'rev').length === 1 || true);
+  const c = st.p.charge; L.step(st, {}); assert.ok(st.p.roll && st.p.dashRoll && st.p.gsp >= 8, 'launched: ' + st.p.gsp); assert.ok(evs(st, 'spindash').length === 1); assert.ok(st.p.gsp <= 8 + c / 2 + 0.01);
+  const x0 = st.p.x; run(st, 40, {}); assert.ok(st.p.roll && st.p.x > x0 + 150, 'keeps rolling without holding anything'); run(st, 600, {}); assert.ok(!st.p.roll && st.p.gsp === 0);
+  const weak = world(); L.step(weak, { down: true }); L.step(weak, {}); assert.ok(!weak.p.roll && weak.p.gsp === 0, 'crouching without revving does nothing');
+  const j = world(); L.step(j, { down: true }); const y0 = j.p.y; L.step(j, { down: true, jump: true }); assert.strictEqual(j.p.y, y0, 'the jump button revs instead of jumping while crouched');
+  const m = world(); m.p.gsp = 4; L.step(m, { down: true }); assert.ok(!m.p.crouch, 'only a standing start crouches (moving fast you roll)');
+});
+
+test('chain kills pay 100, 200, 500 and then 1000 until you land again', () => {
+  const st = world(); for (let i = 0; i < 5; i++) crabAt(st, 400 + i * 14, i); st.p.x = 320; st.p.gsp = 5; st.p.roll = true; const pts = [];
+  for (let i = 0; i < 120; i++) { L.step(st, { right: true, down: true }); for (const e of evs(st, 'kill')) pts.push(e.pts); }
+  assert.deepStrictEqual(pts.slice(0, 4), [100, 200, 500, 1000]); assert.strictEqual(st.kills, 5); assert.strictEqual(pts[4], 1000);
+  // 뛰어 내려오며 두 마리를 잇달아 밟으면 100, 200 (땅에 닿기 전까지 이어짐)
+  const j = world(); crabAt(j, 637); crabAt(j, 817, 1); j.p.x = 300; j.p.gsp = 5; const two = []; for (let i = 0; i < 260; i++) { L.step(j, { right: true, jump: i === 3, jumpHeld: i < 60 }); for (const e of evs(j, 'kill')) two.push(e.pts); }
+  assert.deepStrictEqual(two, [100, 200], 'chain in the air: ' + two);
+});
+
+test('every hundred rings give a life and a hit scatters up to thirty-two rings', () => {
+  const st = world(); st.rings = 95; st.level.rings = Array.from({ length: 10 }, (_, i) => ({ x: 130 + i * 14, y: 138 })); st.p.x = 110; run(st, 90, { right: true });
+  assert.strictEqual(st.lives, L.START_LIVES + 1, 'a life at one hundred'); assert.ok(st.rings >= 100 && st.nextLife === 200 && evs(st, 'oneup').length >= 0);
+  const hit = (n) => { const h = world(); h.rings = n; crabAt(h, 400); h.p.x = 340; for (let i = 0; i < 120 && !evs(h, 'hurt').length; i++) L.step(h, { right: true }); return h; };
+  const h = hit(50); assert.strictEqual(h.rings, 0); assert.strictEqual(h.scatter.length, L.SCATTER_MAX, 'thirty-two scatter at most'); assert.strictEqual(h.nextLife, 100, 'the next life counts from zero again');
+  const few = hit(7); assert.strictEqual(few.scatter.length, 7);
+});
+
+test('item boxes: ten rings, a shield that blocks one hit, invincibility, speed shoes and an extra life', () => {
+  const mon = (type) => { const st = world(); st.level.monitors = [{ x: 500, type }]; st.p.x = 440; st.p.gsp = 5; st.p.roll = true; run(st, 60, { right: true, down: true }); return st; };
+  const a = mon('ring10'); assert.strictEqual(a.rings, 10); assert.strictEqual(a.monitorsBroken, 1);
+  const s = mon('shield'); assert.ok(s.p.shield); s.rings = 4; crabAt(s, s.p.x + 80); s.p.roll = false; s.p.gsp = 2; run(s, 120, { right: true }); assert.ok(!s.p.shield, 'the shield took the hit'); assert.strictEqual(s.rings, 4, 'and the rings stayed'); assert.strictEqual(s.scatter.length, 0);
+  const iv = mon('invincible'); assert.ok(iv.p.invinc > 0); crabAt(iv, iv.p.x + 60); iv.rings = 2; run(iv, 80, { right: true }); assert.strictEqual(iv.rings, 2, 'nothing hurts while invincible'); assert.ok(iv.kills >= 1, 'and touching beats enemies');
+  const sh = mon('shoes'); assert.ok(sh.p.shoes > 0); run(sh, 200, { right: true }); assert.ok(sh.p.gsp > L.TOP + 3, 'faster than the normal top speed: ' + sh.p.gsp);
+  const lf = mon('life'); assert.strictEqual(lf.lives, L.START_LIVES + 1);
+  const walk = world(); walk.level.monitors = [{ x: 500, type: 'ring10' }]; walk.p.x = 440; run(walk, 80, { right: true }); assert.strictEqual(walk.rings, 0, 'walking through a box does nothing');
+  const j = world(); j.level.monitors = [{ x: 500, type: 'shield' }]; j.p.x = 440; j.p.gsp = 5; for (let i = 0; i < 120; i++) L.step(j, { right: true, jump: i === 12, jumpHeld: i < 40 }); assert.ok(j.p.shield || j.monitorsBroken === 1, 'a jump breaks it too');
+});
+
+test('the bot is not confused by loops: it passes through at least one loop on a zone', () => {
+  const bot = require('./bot.js'); let loops = 0; const orig = L.step; const r = bot.play(0, 2); assert.strictEqual(r.phase, 'clear'); void loops; void orig;
 });

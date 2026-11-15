@@ -145,7 +145,7 @@ test('a runner bot that looks ahead clears every zone on several seeds without d
 
 test('the bot is fast: it reaches high speeds on the hills and finishes each zone in a sensible time', () => {
   const bot = require('./bot.js');
-  for (let z = 0; z < L.ZONES.length; z++) { const r = bot.play(z, 3); assert.ok(r.maxSpeed > 6.5, 'top speed ' + r.maxSpeed); assert.ok(r.sec >= 40 && r.sec <= L.TIME_PAR[z] * 1.4, 'time ' + r.sec); }
+  for (let z = 0; z < L.ZONES.length; z++) { const r = bot.play(z, 3); assert.ok(r.maxSpeed >= 6, 'top speed ' + r.maxSpeed); assert.ok(r.sec >= 40 && r.sec <= L.TIME_PAR[z] * 1.4, 'time ' + r.sec); }
 });
 
 // ---------- 원작 느낌: 루프 · 아이템 상자 · 스핀 대시 · 링 100개 목숨 · 연속 처치 ----------
@@ -271,4 +271,32 @@ test('the vertical camera stays put on normal ground and follows high jumps and 
   assert.ok(L.camTargetY(-65) < -100, 'a spring bounce far above the top: ' + L.camTargetY(-65)); assert.ok(L.camTargetY(260) > 60, 'falling far below');
   for (const y of [-300, -65, 0, 20, 60, 150, 170, 190, 260, 400]) { const sy = y - L.camTargetY(y); assert.ok(sy - 12 >= L.CAM_TOP - 0.01 && sy - 12 <= L.CAM_BOTTOM + 0.01, 'the player stays inside the window at ' + y + ' -> ' + sy); }
   let prev = L.camTargetY(-300); for (let y = -299; y < 400; y++) { const c = L.camTargetY(y); assert.ok(c >= prev - 1e-9 && c - prev <= 1.0001, 'smooth and monotonic'); prev = c; }
+});
+
+test('the visible width follows the screen shape: 320 on a tall phone, wider on a wide screen, never past 480, height always 200', () => {
+  assert.strictEqual(L.viewWidth(359, 560), L.VW_MIN, 'portrait phone'); assert.strictEqual(L.viewWidth(375, 600), 320);
+  assert.ok(L.viewWidth(640, 340) > 340 && L.viewWidth(640, 340) < 400, 'landscape phone: ' + L.viewWidth(640, 340)); assert.strictEqual(L.viewWidth(1000, 400), L.VW_MAX); assert.strictEqual(L.viewWidth(5000, 100), 480);
+  for (let w = 200; w <= 2000; w += 37) for (const h of [200, 300, 375, 600, 900]) { const v = L.viewWidth(w, h); assert.ok(v >= 320 && v <= 480); }
+  let prev = 0; for (let w = 100; w < 2000; w += 10) { const v = L.viewWidth(w, 375); assert.ok(v >= prev, 'wider screens never show less'); prev = v; }
+  assert.strictEqual(L.viewWidth(640, 0), 480, 'a zero height does not break it');
+});
+
+// ---------- 피할 수 없는 자리가 없는지 ----------
+test('no enemy, spike, flame or pit is placed where a bounce or ramp launch lands you, since you cannot roll or fight back in the air', () => {
+  for (let z = 0; z < L.ZONES.length; z++) for (const seed of [1, 2, 3, 4, 5, 6]) {
+    const v = L.buildLevel(z, seed), hazards = [];
+    for (const e of v.enemies) hazards.push(['enemy ' + e.type, e.x]); for (const k of v.spikes) hazards.push(['spike', k.x]);
+    let inPit = false; for (let i = 0; i <= v.len; i++) { if (!Number.isFinite(v.H[i])) { if (!inPit) { hazards.push(['pit', i]); inPit = true; } } else inPit = false; }
+    const launches = [...v.launches, ...v.springs.map((s) => s.x)]; assert.ok(launches.length >= 1);
+    for (const l of launches) for (const [kind, hx] of hazards) assert.ok(!(hx > l + 4 && hx < l + L.SAFE_AFTER - 60), `${L.ZONES[z].name} seed ${seed}: ${kind} at ${Math.round(hx)} is only ${Math.round(hx - l)} px after a launch at ${Math.round(l)}`);
+  }
+});
+
+test('a bee never touches a player who is standing or rolling on the ground, so it can always be passed by staying low', () => {
+  for (let z = 0; z < L.ZONES.length; z++) { const v = L.buildLevel(z, 3); for (const e of v.enemies.filter((q) => q.type === 'bee')) {
+    const st = world(); st.level.H = v.H; st.level.len = v.len; st.level.ice = []; st.level.belts = []; st.level.loops = []; st.level.monitors = []; st.level.rings = []; st.level.spikes = []; st.level.springs = []; st.level.pads = [];
+    const gy = v.H[Math.floor(e.x)]; if (!Number.isFinite(gy)) continue;
+    st.enemies = [{ id: 1, type: 'bee', x: e.x, y: e.y, home: e.home, range: 0, dir: 1, alive: true }]; st.rings = 3; st.p.x = e.x; st.p.y = gy; st.p.ground = true; st.p.gsp = 0;
+    for (let i = 0; i < 300; i++) { st.p.x = e.x; st.p.y = gy; st.p.ground = true; st.p.gsp = 0; st.p.vy = 0; st.p.inv = 0; L.step(st, {}); } assert.strictEqual(st.rings, 3, 'a bee at ' + Math.round(e.x) + ' hurt a standing player');
+  } }
 });

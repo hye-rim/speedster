@@ -14,6 +14,7 @@ const LOGIC_SP = (() => {
   const DASH_BASE = 8, DASH_MAX_CHARGE = 8, SHOES_TIME = 20 * 60, INVINC_TIME = 15 * 60;   // 스핀 대시 · 신발·무적 시간
   const LOOP_R = 40, LOOP_W = 36, LOOP_MIN = 5;                                              // 루프: 반지름·폭, 이 속도 이상으로 들어가야 한 바퀴 돈다
   const TIME_PAR = [75, 85, 95, 105, 115, 125, 135, 150];        // 이 시간(초) 안에 끝내면 시간 보너스
+  const SAFE_AFTER = 580;                                        // 스프링·점프대·긴 틈 뒤로 이만큼은 위험물을 안 둔다
   const BELT_V = 1.3;                                            // 컨베이어가 밀어 주는 속도(px/프레임)
   // 코스 8개: 테마와 코스마다 고유한 구조(sig)가 있다. 골라 쓰는 sig 는 구간 생성 함수가 맡는다.
   //  valley 깊은 계곡 · tramp 스프링 줄 · iceslide 미끄러운 얼음 내리막 · lavaflame 용암 구멍에서 튀는 불꽃 · belt 컨베이어 · tunnel 가속 판 터널 · longgap 가속 판으로 넘는 긴 틈
@@ -37,21 +38,25 @@ const LOGIC_SP = (() => {
   function buildLevel(zone, seed) {
     const Z = ZONES[zone], rnd = rng(seed * 977 + zone * 31 + 7), len = Z.len;
     const H = new Float32Array(len + 1).fill(Infinity);
-    const L = { zone, name: Z.name, theme: Z.theme, sig: Z.sig, len, H, rings: [], enemies: [], springs: [], pads: [], spikes: [], checks: [], monitors: [], loops: [], ice: [], belts: [], longGaps: [], sigCount: 0, goalX: len - 260 };
+    const L = { zone, name: Z.name, theme: Z.theme, sig: Z.sig, len, H, rings: [], enemies: [], springs: [], pads: [], spikes: [], checks: [], monitors: [], loops: [], ice: [], belts: [], longGaps: [], launches: [], sigCount: 0, goalX: len - 260 };
     let x = 0, y = GROUND_REF;
     const smooth = (x0, y0, x1, y1) => { for (let i = x0; i <= x1 && i <= len; i++) { const t = (i - x0) / Math.max(1, x1 - x0), s = t * t * (3 - 2 * t); H[i] = y0 + (y1 - y0) * s; } };
     const flat = (n) => { smooth(x, y, x + n, y); const a = x; x += n; return [a, x]; };
     const ringsLine = (a, b, step = 28, up = 22) => { for (let i = a + 20; i < b - 10; i += step) L.rings.push({ x: i, y: H[Math.floor(i)] - up }); };
     const slopeTo = (dy) => { const ny = clamp(y + dy, Y_MIN, Y_MAX), d = Math.max(130, Math.round(Math.abs(ny - y) * 2.7)); smooth(x, y, x + d, ny); const a = x; x += d; y = ny; return [a, x]; };
+    // 튕겨 올라 멀리 날아가는 곳(스프링·점프대·긴 틈의 끝) 뒤 SAFE_AFTER 픽셀 안에는 적·가시·불꽃·구멍을 놓지 않는다:
+    // 그때는 몸을 말지 못한 채 공중에 떠서 조종이 어렵고, 닿으면 막을 방법이 없기 때문이다.
+    let safeUntil = 0; const guard = () => { if (x < safeUntil) flat(safeUntil - x); };
     // 코스마다 고유한 구간
     const signature = (kind) => {
+      if (kind === 'lavaflame' || kind === 'longgap') guard();
       if (kind === 'valley') {                                       // 깊은 계곡: 내려갔다 올라온다 (구르면 엄청 빨라진다)
         flat(120); if (Y_MAX - y < 70) { const up = Math.min(80 - (Y_MAX - y), y - Y_MIN); if (up < 20) return false; slopeTo(-up); }
         const dy = Math.min(Z.hill + 26, Y_MAX - y); if (dy < 36) return false;
         const [a, b] = slopeTo(dy); ringsLine(a, b, 20, 16); const [c, d] = slopeTo(-dy); ringsLine(c, d, 20, 16); return true;
       }
       if (kind === 'tramp') {                                        // 스프링 줄: 세 개를 잇달아 밟으며 위의 링 길로
-        const [a, b] = flat(360); for (let k = 0; k < 3; k++) { L.springs.push({ x: a + 70 + k * 100 }); for (let j = 0; j < 4; j++) L.rings.push({ x: a + 70 + k * 100 + 14 + j * 20, y: y - 70 - k * 14 - Math.sin(j / 3 * Math.PI) * 22 }); } flat(520); return true;     // 스프링에 튕겨 멀리 날아가니 뒤에 넓은 평지
+        const [a, b] = flat(360); for (let k = 0; k < 3; k++) { L.springs.push({ x: a + 70 + k * 100 }); L.launches.push(a + 70 + k * 100); for (let j = 0; j < 4; j++) L.rings.push({ x: a + 70 + k * 100 + 14 + j * 20, y: y - 70 - k * 14 - Math.sin(j / 3 * Math.PI) * 22 }); } flat(520); return true;     // 스프링에 튕겨 멀리 날아가니 뒤에 넓은 평지
       }
       if (kind === 'iceslide') {                                     // 얼음 내리막: 바닥이 미끄럽다 (가속·마찰·브레이크가 약하다)
         flat(140); if (Y_MAX - y < 70) { const up = Math.min(80 - (Y_MAX - y), y - Y_MIN); if (up < 20) return false; slopeTo(-up); }
@@ -70,7 +75,7 @@ const LOGIC_SP = (() => {
       }
       if (kind === 'longgap') {                                      // 긴 틈: 가속 판으로 속도를 붙여 점프대에서 날아 건넌다
         const [a] = flat(170); L.pads.push({ x: a + 60, dir: 1 }); const up = Math.min(44, y - Y_MIN); if (up < 30) return false;
-        const [, c] = slopeTo(-up), w = 170 + Math.floor(rnd() * 50); L.longGaps.push({ x0: c, x1: c + w });
+        const [, c] = slopeTo(-up), w = 170 + Math.floor(rnd() * 50); L.longGaps.push({ x0: c, x1: c + w }); L.launches.push(c); safeUntil = c + SAFE_AFTER;
         for (let k = 0; k < 8; k++) L.rings.push({ x: c + 12 + k * (w / 7), y: y - 38 - Math.sin(k / 7 * Math.PI) * 40 });
         x += w; y += Math.min(24, Y_MAX - y); smooth(x, y, x + 320, y); x += 320; return true;
       }
@@ -93,13 +98,14 @@ const LOGIC_SP = (() => {
       if (Z.sig && x > 900 && x < len - 1400 && (rnd() < Z.sigP || L.sigCount < Math.floor(x / len * 5))) { if (signature(Z.sig)) { L.sigCount++; if (y < Y_MIN + 5 || y > Y_MAX - 5) slopeTo(GROUND_REF - y); continue; } }
       const r = rnd();
       if (L.checks.length < 2 && x > len * nextCheck / 3) { const [a, b] = flat(160); L.checks.push({ x: a + 80 }); nextCheck++; continue; }
+      if (r < Z.pit + 0.14 + Z.enemy + Z.spike) guard();                               // 구멍·점프대·적·가시는 날아가는 곳 뒤 안전 구간 밖에서만
       if (r < Z.pit) {                                           // 구멍: 앞은 평평하게, 구멍 위에 링 곡선
         const [, b] = flat(120 + Math.floor(rnd() * 80)), w = 70 + Math.floor(rnd() * (PIT_LIMIT - 70));
         for (let k = 0; k < 7; k++) L.rings.push({ x: b + 8 + k * (w / 6), y: y - 24 - Math.sin(k / 6 * Math.PI) * 38 });
         x += w; smooth(x, y, x + 230, y); const a = x; x += 230; ringsLine(a, x);
       } else if (r < Z.pit + 0.14) {                              // 점프대: 오르막 끝이 갑자기 끊기고 아래에 땅
         const [a, b] = slopeTo(-Math.min(46, y - Y_MIN));
-        if (b - a > 20) { const w = 60 + Math.floor(rnd() * 40); for (let k = 0; k < 6; k++) L.rings.push({ x: b + 10 + k * (w / 5), y: y - 40 - Math.sin(k / 5 * Math.PI) * 30 }); const drop = Math.min(30, Y_MAX - y); x += w; y += drop; smooth(x, y, x + 160, y); const c = x; x += 160; ringsLine(c, x); }
+        if (b - a > 20) { L.launches.push(b); safeUntil = b + SAFE_AFTER; const w = 60 + Math.floor(rnd() * 40); for (let k = 0; k < 6; k++) L.rings.push({ x: b + 10 + k * (w / 5), y: y - 40 - Math.sin(k / 5 * Math.PI) * 30 }); const drop = Math.min(30, Y_MAX - y); x += w; y += drop; smooth(x, y, x + 160, y); const c = x; x += 160; ringsLine(c, x); }
       } else if (r < Z.pit + 0.14 + Z.enemy) {                    // 적 구간
         const [a, b] = flat(300 + Math.floor(rnd() * 120)); ringsLine(a, b);
         const n = 2 + Math.floor(rnd() * 2);
@@ -107,7 +113,7 @@ const LOGIC_SP = (() => {
       } else if (r < Z.pit + 0.14 + Z.enemy + Z.spike) {          // 가시 구간
         const [a, b] = flat(220); for (let k = 0; k < 3; k++) L.spikes.push({ x: a + 80 + k * 16 }); ringsLine(a, b, 32, 40);
       } else if (r < Z.pit + 0.14 + Z.enemy + Z.spike + 0.12) {   // 스프링과 높은 길
-        const [a, b] = flat(240); L.springs.push({ x: a + 90 }); for (let k = 0; k < 5; k++) L.rings.push({ x: a + 90 + 10 + k * 18, y: y - 90 - Math.sin(k / 4 * Math.PI) * 24 });
+        const [a, b] = flat(240); L.springs.push({ x: a + 90 }); L.launches.push(a + 90); safeUntil = a + 90 + SAFE_AFTER; for (let k = 0; k < 5; k++) L.rings.push({ x: a + 90 + 10 + k * 18, y: y - 90 - Math.sin(k / 4 * Math.PI) * 24 });
       } else if (r < Z.pit + 0.14 + Z.enemy + Z.spike + 0.22) {   // 가속 판과 긴 내리막
         const [a, b] = flat(160); L.pads.push({ x: a + 70, dir: 1 }); const [c, d] = slopeTo(Math.min(Z.hill, Y_MAX - y)); ringsLine(c, d, 26, 18);
       } else {                                                    // 언덕: 올랐다 내려오기
@@ -332,7 +338,11 @@ const LOGIC_SP = (() => {
   const CAM_TOP = 50, CAM_BOTTOM = 175;
   function camTargetY(py) { const wy = py - 12; return wy < CAM_TOP ? wy - CAM_TOP : wy > CAM_BOTTOM ? wy - CAM_BOTTOM : 0; }
 
-  return { CAM_TOP, CAM_BOTTOM, camTargetY, VW, VH, ACC, DEC, FRC, TOP, SLOPE, GRAV, JUMP, MAX_GSP, SPRING_V, PAD_V, INVULN, GROUND_REF, Y_MIN, Y_MAX, PIT_LIMIT, ZONES, TIME_PAR, START_LIVES,
-    BELT_V, LOOP_R, LOOP_W, LOOP_MIN, SCATTER_MAX, CHAIN_POINTS, LIFE_RINGS, DASH_BASE, SHOES_TIME, INVINC_TIME, rng, buildLevel, groundY, angleAt, newGame, spawn, step, isSpin, canKill, pbox };
+  // 화면 비율에 맞춘 보이는 가로 범위: 세로는 항상 200, 가로는 320(세로 폰 화면) ~ 480(아주 넓은 화면). 가로가 넓을수록 앞이 멀리 보인다
+  const VW_MIN = 320, VW_MAX = 480;
+  const viewWidth = (availW, availH) => clamp(Math.round(VH * availW / Math.max(1, availH)), VW_MIN, VW_MAX);
+
+  return { VW_MIN, VW_MAX, viewWidth, CAM_TOP, CAM_BOTTOM, camTargetY, VW, VH, ACC, DEC, FRC, TOP, SLOPE, GRAV, JUMP, MAX_GSP, SPRING_V, PAD_V, INVULN, GROUND_REF, Y_MIN, Y_MAX, PIT_LIMIT, ZONES, TIME_PAR, START_LIVES,
+    BELT_V, SAFE_AFTER, LOOP_R, LOOP_W, LOOP_MIN, SCATTER_MAX, CHAIN_POINTS, LIFE_RINGS, DASH_BASE, SHOES_TIME, INVINC_TIME, rng, buildLevel, groundY, angleAt, newGame, spawn, step, isSpin, canKill, pbox };
 })();
 if (typeof module !== 'undefined') module.exports = LOGIC_SP;

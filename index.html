@@ -43,11 +43,12 @@
   #jumpBtn.on { background:rgba(255,210,58,.55); transform:scale(.95); }
   @media (pointer:coarse) { #controls { display:flex; } }
   @media (pointer:coarse) and (orientation:landscape) {
-    #app { flex-direction:row; gap:8px; padding:4px 8px; }
-    #controls { display:contents; }
-    #stick { order:0; flex:0 0 auto; width:150px; height:96px; }
-    #wrap { order:1; }
-    #jumpBtn { order:2; flex:0 0 auto; width:92px; height:92px; }
+    /* 가로 화면: 게임 화면이 가운데 전체를 쓰고, 조이스틱 칸과 점프 버튼은 양쪽 아래에 반투명으로 겹쳐 놓는다 */
+    #app { padding:4px 8px; }
+    #controls { position:absolute; left:0; right:0; bottom:0; max-width:none; padding:0 14px calc(8px + env(safe-area-inset-bottom)); pointer-events:none; }
+    #controls > * { pointer-events:auto; opacity:.72; }
+    #stick { width:150px; height:96px; }
+    #jumpBtn { width:92px; height:92px; }
   }
   .pc { display:none; } @media (pointer:fine) { .pc { display:inline; } .touch { display:none; } }
 </style>

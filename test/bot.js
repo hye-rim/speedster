@@ -28,9 +28,10 @@ function rollout(st, plan, frames) {
 }
 function play(zone, seed, opts = {}) {
   const st = L.newGame({ zone, seed, lives: opts.lives || 99 }); let f = 0, hurts = 0, plan = PLANS[0], planLeft = 0, waitJump = -1;
-  const maxF = 60 * (opts.maxSec || 400), frames = opts.frames || 100;
+  const maxF = 60 * (opts.maxSec || 400), frames = opts.frames || 100; const snaps = [];
   while (st.phase !== 'clear' && st.phase !== 'over' && f < maxF) {
     f++;
+    if (opts.onHurt) { snaps.push(clone(st)); if (snaps.length > 140) snaps.shift(); }
     const p = st.p; let inp = { right: true };
     if (st.phase === 'play' && p.ground) {
       const near = (arr, ahead) => arr.some((q) => q.x > p.x && q.x - p.x < ahead);
@@ -45,12 +46,13 @@ function play(zone, seed, opts = {}) {
       else if (L.angleAt(st.level, p.x) < -0.12 && Math.abs(p.gsp) > 2) inp = { right: true, down: true };      // 내리막은 굴러서 더 빠르게
     } else if (!p.ground && p.jumping) inp = { right: true, jumpHeld: plan.hold };
     if (waitJump >= 0 && st.phase === 'play' && p.ground) { if (waitJump === 0) { inp = { right: true, jump: true, jumpHeld: plan.hold }; waitJump = -1; } else waitJump--; }
+    const before = opts.onHurt ? { x: p.x, y: p.y, ground: p.ground, jumping: p.jumping, roll: p.roll, gsp: p.gsp, vx: p.vx, loop: !!p.loop, plan: plan.name } : null;
     L.step(st, inp);
-    for (const e of st.events) { if (e.t === 'hurt') hurts++; if (e.t === 'dead' && opts.onDeath) opts.onDeath({ x: Math.round(p.x), why: e.why, f, plan: plan.name }); }
+    for (const e of st.events) { if (e.t === 'hurt') { hurts++; if (opts.onHurt) opts.onHurt(st, before, snaps); } if (e.t === 'dead' && opts.onDeath) opts.onDeath({ x: Math.round(p.x), why: e.why, f, plan: plan.name }); }
   }
   return { phase: st.phase, sec: Math.round(f / 60), deaths: st.deaths, hurts, rings: st.ringsTotal, score: st.score, x: Math.round(st.p.x), maxSpeed: +st.maxSpeed.toFixed(1), kills: st.kills };
 }
-module.exports = { play };
+module.exports = { play, clone };
 if (require.main === module && process.env.BOT) {
   for (let z = 0; z < 4; z++) { const rs = []; const t0 = Date.now(); for (let s = 1; s <= 6; s++) rs.push(play(z, s)); console.log(L.ZONES[z].name, rs.map((r) => `${r.phase === 'clear' ? '완주' : '실패'} ${r.sec}초 사망${r.deaths} 피격${r.hurts} 최고속도${r.maxSpeed}`).join(' | '), `(${((Date.now() - t0) / 1000).toFixed(0)}초 걸림)`); }
 }

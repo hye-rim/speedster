@@ -5,7 +5,7 @@ const tutorialSignal = (type) => window.dispatchEvent(new CustomEvent('arcade:tu
 // 번개 다람쥐: 화면·입력·소리. 규칙은 logic.js (LOGIC_SP). 여기서는 규칙이 알려 주는 일(events)을 보고 소리·효과를 만든다.
 const L = LOGIC_SP, $ = (id) => document.getElementById(id);
 const TUT = /[?&]tutorial=1(&|$)/.test(location.search);
-const VW = L.VW, VH = L.VH;
+let VW = L.VW; const VH = L.VH;                                   // 보이는 가로 범위는 화면 비율에 맞춰 바뀐다(resize)
 const cv = $('c'), ctx = cv.getContext('2d');
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -55,9 +55,12 @@ let cssW = VW, K = 1;
 function resize() {
   const land = matchMedia('(pointer:coarse) and (orientation:landscape)').matches;
   const ctl = $('controls'), controlsH = (!land && getComputedStyle(ctl).display !== 'none') ? ctl.offsetHeight + 8 : 0;
-  const sideW = land ? $('stick').offsetWidth + $('jumpBtn').offsetWidth + 32 : 0;
-  const s = Math.max(0.5, Math.min((innerWidth - 16 - sideW) / VW, (innerHeight - 20 - controlsH) / VH));
+  const sideW = 0;                                                                    // 가로 화면에서도 조작판은 게임 화면 위에 겹치므로 옆자리를 안 뺀다
+  const availW = innerWidth - 16 - sideW, availH = innerHeight - 20 - controlsH;
+  VW = L.viewWidth(availW, availH);                                                  // 세로 폰 320 · 가로 폰은 더 넓게(최대 480)
+  const s = Math.max(0.5, Math.min(availW / VW, availH / VH));
   cssW = VW * s; cv.style.width = VW * s + 'px'; cv.style.height = VH * s + 'px';
+  if (G) camX = Math.max(0, Math.min(G.level.len - VW, camX));
   K = Math.max(1, Math.ceil(s * Math.min(2, window.devicePixelRatio || 1)));
   cv.width = VW * K; cv.height = VH * K;
 }
@@ -174,7 +177,7 @@ function handle(events) {
     else if (e.t === 'spring') { sfx.spring(); tutorialSignal('spring'); }
     else if (e.t === 'boost') { sfx.boost(); tutorialSignal('boost'); }
     else if (e.t === 'check') { sfx.check(); floats.push({ x: e.x, y: 80, t: 0, text: '체크포인트' }); }
-    else if (e.t === 'respawn') { camX = Math.max(0, G.p.x - 110); camY = 0; trail = []; }
+    else if (e.t === 'respawn') { camX = Math.max(0, G.p.x - VW * 0.34); camY = 0; trail = []; }
     else if (e.t === 'clear') { tutorialSignal('clear'); burst(G.p.x, G.p.y - 12, '#ffe27a', 24, 3); }
   }
 }
@@ -360,7 +363,7 @@ function drawHud() {
   t(`SCORE ${G.score}`, 8, 6); t(`TIME ${Math.floor(G.t / 3600)}:${String(Math.floor(G.t / 60) % 60).padStart(2, '0')}`, 8, 20);
   ctx.strokeStyle = '#ffd23a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(14, 41, 4, 5.5, 0, 0, 6.283); ctx.stroke(); t(`× ${G.rings}`, 22, 35, G.rings === 0 ? '#ff7a7a' : '#ffd23a');
   t(`🐿 × ${Math.max(0, G.lives)}`, 8, 50); if (G.p.shoes > 0) t(`»${Math.ceil(G.p.shoes / 60)}`, 8, 64, '#ff9a6a'); if (G.p.invinc > 0) t(`★${Math.ceil(G.p.invinc / 60)}`, G.p.shoes > 0 ? 40 : 8, 64, '#fff'); if (TUT) t('연습', VW / 2, 6, '#ffe27a', 'center');
-  const sp = Math.abs(G.p.ground ? G.p.gsp : G.p.vx); t(`${Math.round(sp * 60)} px/s`, VW - 8, VH - 14, sp > 7 ? '#ffe27a' : '#fff', 'right');
+  const sp = Math.abs(G.p.ground ? G.p.gsp : G.p.vx); t(`${Math.round(sp * 60)} px/s`, VW / 2, VH - 14, sp > 7 ? '#ffe27a' : '#fff', 'center');
 }
 function render() {
   ctx.setTransform(K, 0, 0, K, 0, 0);
@@ -390,7 +393,7 @@ function render() {
 let last = performance.now(), acc = 0;
 function tick() {
   const ev = L.step(G, readInput()) || G.events; handle(G.events);
-  const p = G.p, target = Math.max(0, Math.min(G.level.len - VW, p.x - 110 + Math.max(-30, Math.min(70, (p.ground ? p.gsp : p.vx) * 9))));
+  const p = G.p, target = Math.max(0, Math.min(G.level.len - VW, p.x - VW * 0.34 + Math.max(-30, Math.min(70, (p.ground ? p.gsp : p.vx) * 9))));
   camX += (target - camX) * (G.phase === 'dying' ? 0 : 0.14); if (Math.abs(target - camX) > 160) camX = target;
   // 세로 카메라: 캐릭터가 화면 가운데 여유 구간(위 50 ~ 아래 175)을 벗어나면 부드럽게 따라간다. 여유 구간 안에서는 원래 위치(0)로 돌아온다
   const tY = L.camTargetY(p.y);
@@ -406,5 +409,5 @@ function frame(now) {
 showTitle(); resize(); requestAnimationFrame(frame); setTimeout(resize, 60);
 
 /* @test-hooks:start */
-window.__sp = { get camY() { return camY; }, get G() { return G; }, get screen() { return screen; }, get unlocked() { return unlocked; }, get best() { return best; }, get pad() { return pad; }, get camX() { return camX; }, L, tick, render, startZone, setG(g) { G = g; }, get paused() { return paused; }, setPaused, pressJump: () => { jumpEdge = true; } };
+window.__sp = { get VW() { return VW; }, resize, get camY() { return camY; }, get G() { return G; }, get screen() { return screen; }, get unlocked() { return unlocked; }, get best() { return best; }, get pad() { return pad; }, get camX() { return camX; }, L, tick, render, startZone, setG(g) { G = g; }, get paused() { return paused; }, setPaused, pressJump: () => { jumpEdge = true; } };
 /* @test-hooks:end */

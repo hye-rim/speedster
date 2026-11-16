@@ -429,3 +429,14 @@ test('the same course is not simply repeated: two seeds give clearly different l
   for (let z = 0; z < 8; z++) { const a = L.buildLevel(z, 1).seq.join(','), b = L.buildLevel(z, 2).seq.join(','); assert.notStrictEqual(a, b, 'zone ' + z); }
   const h = (v) => Array.from(v.H.filter((_, i) => i % 50 === 0)).join(','); assert.notStrictEqual(h(L.buildLevel(3, 1)), h(L.buildLevel(3, 2)));
 });
+
+test('no section is ever repeated inside one course: every kind with its shape and size appears once, and a kind never runs more than twice in a row', () => {
+  for (let z = 0; z < L.ZONES.length; z++) for (let seed = 1; seed <= 30; seed++) {
+    const q = L.buildLevel(z, seed).seq; assert.strictEqual(new Set(q).size, q.length, `repeated section in zone ${z} seed ${seed}`);
+    const kind = (k) => k.split('|')[0]; let run = 1;
+    for (let i = 1; i < q.length; i++) { run = kind(q[i]) === kind(q[i - 1]) ? run + 1 : 1; assert.ok(run <= 3, `same kind ${run} times in a row in zone ${z} seed ${seed}`); }
+    const n = {}; for (const k of q) n[kind(k)] = (n[kind(k)] || 0) + 1;
+    for (const k of Object.keys(n)) if (k !== 'breather') assert.ok(n[k] <= 8, `${k} appears ${n[k]} times in zone ${z} seed ${seed}`);
+    assert.ok(q.filter((k) => kind(k) === 'breather').length <= 2, 'few filler sections');
+  }
+});

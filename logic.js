@@ -9,6 +9,9 @@ const LOGIC_SP = (() => {
   // 코스마다 다른 적 (땅을 걷는 적, 날아다니는 적). 움직임 종류는 같고(땅=type crab, 공중=type bee) 모양·속도만 달라요
   const SKINS = { grass: ['snail', 'bird'], desert: ['scorpion', 'vulture'], jungle: ['frog', 'parrot'], ice: ['penguin', 'snowbat'], lava: ['lavablob', 'ember'], factory: ['gearbot', 'drone'], neon: ['spiderbot', 'ufo'], sky: ['puffer', 'kite'] };
   const SKIN_SPD = { snail: 0.3, scorpion: 0.65, frog: 0.5, penguin: 0.6, lavablob: 0.4, gearbot: 0.7, spiderbot: 0.6, puffer: 0.35, bird: 0.8, vulture: 0.9, parrot: 0.8, snowbat: 0.85, ember: 0.9, drone: 0.75, ufo: 0.8, kite: 0.9 };
+  const DROP_SKIN = { desert: 'boulder', ice: 'icicle', lava: 'meteor', factory: 'piston' };   // 위에서 떨어지는 위험물(경고 그림자 → 쿵) 코스별 모양
+  const CRUMBLE_T = 36, CRUMBLE_GONE = 170;                       // 무너지는 징검돌: 밟고 서 있으면 이만큼 뒤에 사라지고, 한참 뒤에 다시 생긴다
+  const platOff = (pl, t) => (pl.amp ? pl.amp * Math.sin(t / pl.per * Math.PI * 2 + pl.ph) : 0);   // 움직이는 발판의 좌우 흔들림
   const SPRING_V = 10, PAD_V = 10, HURT_VX = 2, HURT_VY = -4, INVULN = 120;
   const GROUND_REF = 150, Y_MIN = 78, Y_MAX = 168;            // 코스 땅 높이의 기준과 한계
   const PIT_LIMIT = 110;                                      // 구멍 폭 최대 (느리게 달려도 점프로 넘는다)
@@ -22,14 +25,14 @@ const LOGIC_SP = (() => {
   // 코스 8개: 테마와 코스마다 고유한 구조(sig)가 있다. 골라 쓰는 sig 는 구간 생성 함수가 맡는다.
   //  valley 깊은 계곡 · tramp 스프링 줄 · iceslide 미끄러운 얼음 내리막 · lavaflame 용암 구멍에서 튀는 불꽃 · belt 컨베이어 · tunnel 가속 판 터널 · longgap 가속 판으로 넘는 긴 틈
   const ZONES = [
-    { name: '초원 언덕', theme: 'grass', len: 16000, pit: 0.10, enemy: 0.30, spike: 0.00, hill: 46, sig: null, sigP: 0 },
-    { name: '모래 협곡', theme: 'desert', len: 17500, pit: 0.14, enemy: 0.34, spike: 0.06, hill: 54, sig: 'valley', sigP: 0.20 },
-    { name: '정글 숲', theme: 'jungle', len: 19000, pit: 0.14, enemy: 0.38, spike: 0.06, hill: 56, sig: 'tramp', sigP: 0.18 },
-    { name: '얼음 능선', theme: 'ice', len: 20500, pit: 0.16, enemy: 0.40, spike: 0.10, hill: 60, sig: 'iceslide', sigP: 0.20 },
-    { name: '용암 화산', theme: 'lava', len: 22000, pit: 0.18, enemy: 0.42, spike: 0.12, hill: 62, sig: 'lavaflame', sigP: 0.22 },
-    { name: '번개 공장', theme: 'factory', len: 23500, pit: 0.20, enemy: 0.46, spike: 0.14, hill: 64, sig: 'belt', sigP: 0.22 },
-    { name: '네온 도시', theme: 'neon', len: 25000, pit: 0.22, enemy: 0.48, spike: 0.16, hill: 66, sig: 'tunnel', sigP: 0.22 },
-    { name: '구름 섬', theme: 'sky', len: 27000, pit: 0.24, enemy: 0.50, spike: 0.18, hill: 68, sig: 'longgap', sigP: 0.22 },
+    { name: '초원 언덕', theme: 'grass', len: 16000, pit: 0.10, enemy: 0.30, spike: 0.00, hill: 46, sig: null, sigP: 0, extra: ['floatbridge', 'stones'] },
+    { name: '모래 협곡', theme: 'desert', len: 17500, pit: 0.14, enemy: 0.34, spike: 0.06, hill: 54, sig: 'valley', sigP: 0.20, extra: ['stones', 'dropper'] },
+    { name: '정글 숲', theme: 'jungle', len: 19000, pit: 0.14, enemy: 0.38, spike: 0.06, hill: 56, sig: 'tramp', sigP: 0.18, extra: ['floatbridge', 'stones'] },
+    { name: '얼음 능선', theme: 'ice', len: 20500, pit: 0.16, enemy: 0.40, spike: 0.10, hill: 60, sig: 'iceslide', sigP: 0.20, extra: ['stones', 'dropper'] },
+    { name: '용암 화산', theme: 'lava', len: 22000, pit: 0.18, enemy: 0.42, spike: 0.12, hill: 62, sig: 'lavaflame', sigP: 0.22, extra: ['stones', 'dropper'] },
+    { name: '번개 공장', theme: 'factory', len: 23500, pit: 0.20, enemy: 0.46, spike: 0.14, hill: 64, sig: 'belt', sigP: 0.22, extra: ['floatbridge', 'dropper'] },
+    { name: '네온 도시', theme: 'neon', len: 25000, pit: 0.22, enemy: 0.48, spike: 0.16, hill: 66, sig: 'tunnel', sigP: 0.22, extra: ['floatbridge', 'stones'] },
+    { name: '구름 섬', theme: 'sky', len: 27000, pit: 0.24, enemy: 0.50, spike: 0.18, hill: 68, sig: 'longgap', sigP: 0.22, extra: ['stones', 'floatbridge'] },
   ];
 
   const rng = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
@@ -41,7 +44,7 @@ const LOGIC_SP = (() => {
   function buildLevel(zone, seed) {
     const Z = ZONES[zone], rnd = rng(seed * 977 + zone * 31 + 7), len = Z.len;
     const H = new Float32Array(len + 1).fill(Infinity);
-    const L = { zone, name: Z.name, theme: Z.theme, sig: Z.sig, len, H, rings: [], enemies: [], springs: [], pads: [], spikes: [], checks: [], monitors: [], loops: [], ice: [], belts: [], longGaps: [], launches: [], plats: [], highs: 0, pitN: 0, sigCount: 0, goalX: len - 260 };
+    const L = { zone, name: Z.name, theme: Z.theme, sig: Z.sig, len, H, rings: [], enemies: [], springs: [], pads: [], spikes: [], checks: [], monitors: [], loops: [], ice: [], belts: [], longGaps: [], launches: [], plats: [], highs: 0, pitN: 0, extras: 0, movers: 0, stonesN: 0, drops: 0, sigCount: 0, goalX: len - 260 };
     let x = 0, y = GROUND_REF;
     const smooth = (x0, y0, x1, y1) => { for (let i = x0; i <= x1 && i <= len; i++) { const t = (i - x0) / Math.max(1, x1 - x0), s = t * t * (3 - 2 * t); H[i] = y0 + (y1 - y0) * s; } };
     const flat = (n) => { smooth(x, y, x + n, y); const a = x; x += n; return [a, x]; };
@@ -53,6 +56,23 @@ const LOGIC_SP = (() => {
     // 코스마다 고유한 구간
     const signature = (kind) => {
       if (kind === 'lavaflame' || kind === 'longgap') guard();
+      if (kind === 'floatbridge') {                                  // 떠다니는 다리: 넓은 구멍 위를 좌우로 흔들리는 발판 두 개로 건넌다 (타이밍을 봐서 갈아탄다)
+        guard(); flat(220); const bx = x, W = 330;
+        L.plats.push({ x0: bx + 30, x1: bx + 160, y, amp: 45, per: 170, ph: 0 }, { x0: bx + 170, x1: bx + 300, y, amp: 45, per: 190, ph: 2.1 });
+        for (let k = 0; k < 8; k++) L.rings.push({ x: bx + 20 + k * 41, y: y - 36 - Math.sin(k / 7 * Math.PI) * 26 });
+        x += W; smooth(x, y, x + 260, y); const a = x; x += 260; ringsLine(a, x); L.movers++; return true;
+      }
+      if (kind === 'stones') {                                       // 무너지는 징검돌: 밟고 오래 서 있으면 떨어진다. 멈추지 말고 달려 건넌다
+        guard(); flat(220); const bx = x, W = 330;
+        for (const s of [20, 120, 220]) L.plats.push({ x0: bx + s, x1: bx + s + 70, y, crumble: true });
+        for (let k = 0; k < 7; k++) L.rings.push({ x: bx + 20 + k * 46, y: y - 34 - Math.sin(k / 6 * Math.PI) * 24 });
+        x += W; smooth(x, y, x + 260, y); const a = x; x += 260; ringsLine(a, x); L.stonesN++; return true;
+      }
+      if (kind === 'dropper') {                                      // 떨어지는 것: 바닥에 경고 그림자가 생기고 잠시 뒤 위에서 쿵 떨어졌다 올라간다 (사이로 지나간다)
+        guard(); flat(140); const skin = DROP_SKIN[Z.theme] || 'boulder';
+        for (let k = 0; k < 3; k++) { const [a, b] = flat(170); L.enemies.push({ type: 'drop', skin, x: a + 85, y, base: y, home: a + 85, range: 0 }); ringsLine(a, b, 34, 24); L.drops++; }
+        flat(80); return true;
+      }
       if (kind === 'valley') {                                       // 깊은 계곡: 내려갔다 올라온다 (구르면 엄청 빨라진다)
         flat(120); if (Y_MAX - y < 70) { const up = Math.min(80 - (Y_MAX - y), y - Y_MIN); if (up < 20) return false; slopeTo(-up); }
         const dy = Math.min(Z.hill + 26, Y_MAX - y); if (dy < 36) return false;
@@ -77,7 +97,7 @@ const LOGIC_SP = (() => {
         const [a, b] = flat(560); for (let k = 0; k < 3; k++) L.pads.push({ x: a + 70 + k * 150, dir: 1 }); ringsLine(a, b, 24, 22); return true;
       }
       if (kind === 'longgap') {                                      // 긴 틈: 가속 판으로 속도를 붙여 점프대에서 날아 건넌다
-        const [a] = flat(170); L.pads.push({ x: a + 60, dir: 1 }); const up = Math.min(44, y - Y_MIN); if (up < 30) return false;
+        if (y - Y_MIN < 30) { const dn = Math.min(70, Y_MAX - y); if (dn < 20) return false; slopeTo(dn); } const [a] = flat(170); L.pads.push({ x: a + 60, dir: 1 }); const up = Math.min(44, y - Y_MIN); if (up < 30) return false;
         const [, c] = slopeTo(-up), w = 170 + Math.floor(rnd() * 50); L.longGaps.push({ x0: c, x1: c + w }); L.launches.push(c); safeUntil = c + SAFE_AFTER;
         for (let k = 0; k < 8; k++) L.rings.push({ x: c + 12 + k * (w / 7), y: y - 38 - Math.sin(k / 7 * Math.PI) * 40 });
         x += w; y += Math.min(24, Y_MAX - y); smooth(x, y, x + 320, y); x += 320; return true;
@@ -105,6 +125,7 @@ const LOGIC_SP = (() => {
     let nextCheck = 1;
     while (x < len - 1000) {
       const q = rnd();
+      if (L.checks.length < 2 && x > len * nextCheck / 3) { const [a] = flat(160); L.checks.push({ x: a + 80 }); nextCheck++; continue; }
       if ((q < 0.10 || L.loops.length < Math.floor(x / len * 4)) && x > 900) {                                  // 루프: 앞에 달릴 평지, 루프, 뒤에 평지. 링이 원을 따라 놓인다
         flat(300); const lx = x; flat(LOOP_W + 140); L.loops.push({ x: lx, y: y });
         for (let k = 1; k <= 10; k++) { const th = k / 11 * Math.PI * 2; L.rings.push({ x: lx + LOOP_R * Math.sin(th) + LOOP_W * th / (Math.PI * 2), y: y - LOOP_R * (1 - Math.cos(th)) - 10 }); }
@@ -115,9 +136,9 @@ const LOGIC_SP = (() => {
         L.monitors.push({ x: a + 110, type: kinds[Math.floor(rnd() * kinds.length)] }); ringsLine(a, b); continue;
       }
       if (x > 1400 && x < len - 2600 && L.highs < 1 + Math.floor(x / len * 3)) { highroad(); continue; }
+      if (x > 2200 && x < len - 2800 && L.extras < Math.floor(x / len * 3.5) && Z.extra) { if (signature(Z.extra[Math.floor(rnd() * Z.extra.length)])) { L.extras++; if (y < Y_MIN + 5 || y > Y_MAX - 5) slopeTo(GROUND_REF - y); continue; } }
       if (Z.sig && x > 900 && x < len - 1400 && (rnd() < Z.sigP || L.sigCount < Math.floor(x / len * 5))) { if (signature(Z.sig)) { L.sigCount++; if (y < Y_MIN + 5 || y > Y_MAX - 5) slopeTo(GROUND_REF - y); continue; } }
       let r = rnd(); if (x > 1800 && L.pitN < Math.floor(x / len * 3)) r = 0;                        // 구멍도 코스마다 꼭 몇 개는 있게
-      if (L.checks.length < 2 && x > len * nextCheck / 3) { const [a, b] = flat(160); L.checks.push({ x: a + 80 }); nextCheck++; continue; }
       if (r < Z.pit + 0.14 + Z.enemy + Z.spike) guard();                               // 구멍·점프대·적·가시는 날아가는 곳 뒤 안전 구간 밖에서만
       if (r < Z.pit) {                                           // 구멍: 앞은 평평하게
         L.pitN++;                                                  // 구멍 위에 링 곡선
@@ -144,6 +165,7 @@ const LOGIC_SP = (() => {
     }
     smooth(x, y, x + 220, GROUND_REF); x += 220; y = GROUND_REF; smooth(x, y, len, y);          // 끝은 부드럽게 내려와 평평하게
     L.rings = L.rings.filter((q) => q.x < len - 300);
+    L.plats.forEach((p, i) => { p.id = i; });
     return L;
   }
 
@@ -162,7 +184,7 @@ const LOGIC_SP = (() => {
     const st = {
       zone, level, lives: opts.lives || START_LIVES, score: opts.score | 0, rings: 0, ringsTotal: 0, t: 0, events: [], phase: 'play', tutorial: !!opts.tutorial,
       checkX: 60, deaths: 0, kills: 0, spring: 0, maxSpeed: 0, chain: 0, nextLife: LIFE_RINGS, mon: new Set(), loopsRun: 0, monitorsBroken: 0,
-      enemies: [], clearT: 0, dyingT: 0, scatter: [], got: new Set(),
+      enemies: [], clearT: 0, dyingT: 0, scatter: [], got: new Set(), cr: {}, gone: {},
     };
     st.enemies = level.enemies.map((e, i) => ({ id: i, type: e.type, skin: e.skin, spd: SKIN_SPD[e.skin], x: e.x, y: e.y, home: e.home, range: e.range, base: e.base, dir: i % 2 ? 1 : -1, alive: true, vy: 0 }));
     if (st.tutorial) st.enemies.unshift({ id: 900, type: 'crab', skin: SKINS[level.theme][0], spd: SKIN_SPD[SKINS[level.theme][0]], x: 640, y: groundY(level, 640), home: 640, range: 40, dir: 1, alive: true, vy: 0 });      // 연습: 처음에 게 한 마리
@@ -200,8 +222,14 @@ const LOGIC_SP = (() => {
     st.t++;
     if (p.inv > 0) p.inv--; if (p.shoes > 0) p.shoes--; if (p.invinc > 0) { p.invinc--; if (p.invinc === 0) emit(st, { t: 'powerend' }); }
     const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+    for (const id of Object.keys(st.gone)) if (st.t >= st.gone[id]) delete st.gone[id];
+    if (p.ground && p.plat && p.plat.amp) p.x += platOff(p.plat, st.t) - platOff(p.plat, st.t - 1);         // 움직이는 발판은 위에 선 사람을 같이 데려간다
     if (p.ground) stepGround(st, input, dir); else stepAir(st, input, dir);
     if (!p.ground) p.plat = null;
+    if (p.ground && p.plat && p.plat.crumble) {                                                               // 무너지는 징검돌
+      const id = p.plat.id; st.cr = { [id]: (st.cr[id] || 0) + 1 };
+      if (st.cr[id] >= CRUMBLE_T) { st.gone[id] = st.t + CRUMBLE_GONE; st.cr = {}; p.ground = false; p.plat = null; p.vx = p.gsp; p.vy = 0; p.jumping = false; p.roll = false; emit(st, { t: 'crumble', id }); }
+    } else st.cr = {};
     p.jumpHeld = !!input.jumpHeld || !!input.jump;
     st.maxSpeed = Math.max(st.maxSpeed, Math.abs(p.ground ? p.gsp : p.vx));
     if (!p.moved && Math.abs(p.gsp) > 0.5) { p.moved = true; emit(st, { t: 'move' }); }
@@ -257,7 +285,7 @@ const LOGIC_SP = (() => {
       p.ground = false; p.jumping = true; p.roll = false; p.dashRoll = false; emit(st, { t: 'jump' }); return;
     }
     // 땅을 따라 간다. 땅이 갑자기 사라지거나 크게 낮아지면(점프대·낭떠러지) 속도를 그대로 가진 채 날아간다
-    const nx = p.x + p.gsp * cs, gy = p.plat ? (nx >= p.plat.x0 && nx <= p.plat.x1 ? p.plat.y : Infinity) : groundY(L, nx);
+    const po = p.plat ? platOff(p.plat, st.t) : 0, nx = p.x + p.gsp * cs, gy = p.plat ? (nx >= p.plat.x0 + po && nx <= p.plat.x1 + po ? p.plat.y : Infinity) : groundY(L, nx);
     if (!Number.isFinite(gy) || gy - p.y > 6 + Math.abs(p.gsp) * Math.abs(Math.tan(ang)) + 3) {
       p.x = nx; p.vx = p.gsp * cs; p.vy = -p.gsp * sn; p.ground = false; p.jumping = false; p.roll = false; emit(st, { t: 'air' }); return;
     }
@@ -277,7 +305,7 @@ const LOGIC_SP = (() => {
     p.x += p.vx; p.y += p.vy;
     if (p.x < 8) { p.x = 8; p.vx = Math.max(0, p.vx); }
     let gy = groundY(L, p.x), plat = null;
-    if (p.vy >= 0) for (const pl of L.plats) if (p.x >= pl.x0 - 3 && p.x <= pl.x1 + 3 && oy <= pl.y + 0.01 && p.y >= pl.y && (plat === null || pl.y < plat.y)) plat = pl;      // 발판은 아래에서 위로는 통과하고, 위에서 내려올 때만 선다
+    if (p.vy >= 0) for (const pl of L.plats) { if (st.gone[pl.id]) continue; const o = platOff(pl, st.t); if (p.x >= pl.x0 + o - 3 && p.x <= pl.x1 + o + 3 && oy <= pl.y + 2.5 && p.y >= pl.y && (plat === null || pl.y < plat.y)) plat = pl; }      // 발판은 아래에서 위로는 통과하고, 위에서 내려올 때만 선다
     if (plat) gy = plat.y;
     if (Number.isFinite(gy) && p.y >= gy && p.vy >= 0 && (plat || oy <= gy + 8)) {          // 착지 (절벽 아래쪽 벽에는 못 올라간다)
       p.y = gy; p.ground = true; p.plat = plat;
@@ -305,6 +333,12 @@ const LOGIC_SP = (() => {
       if (e.type === 'flame') {                                                                // 용암 구멍의 불꽃: 110프레임마다 32프레임 동안 솟았다 내려간다. 닿으면 무엇으로도 못 막는다(무적과 루프만 예외)
         const ph = (st.t + e.id * 23) % 110, h = ph < 32 ? Math.sin(ph / 32 * Math.PI) * 100 : -30; e.y = e.base - h; e.lit = ph < 32;
         if (!p.dead && overlap(pbox(p), { x: e.x - 6, y: e.y - 22, w: 12, h: 22 })) hurt(st, e.x);
+        continue;
+      }
+      if (e.type === 'drop') {                                                                 // 떨어지는 것: 150프레임 주기. 0~50 경고(그림자), 50~58 낙하, 58~90 바닥에 있음, 90~112 다시 올라감
+        const ph = (st.t + e.id * 37) % 150, up = e.base - 220; e.ph = ph;
+        e.y = ph < 50 ? up : ph < 58 ? up + 220 * (ph - 50) / 8 : ph < 90 ? e.base : ph < 112 ? e.base - 220 * (ph - 90) / 22 : up;
+        if (ph >= 53 && ph <= 92 && !p.dead && overlap(pbox(p), { x: e.x - 9, y: e.y - 20, w: 18, h: 20 })) hurt(st, e.x);
         continue;
       }
       if (e.type === 'crab') { e.x += e.dir * (e.spd || 0.5); if (Math.abs(e.x - e.home) > e.range) e.dir = -e.dir; e.y = groundY(L, e.x); }
@@ -371,6 +405,6 @@ const LOGIC_SP = (() => {
   const viewWidth = (availW, availH) => clamp(Math.round(VH * availW / Math.max(1, availH)), VW_MIN, VW_MAX);
 
   return { VW_MIN, VW_MAX, viewWidth, viewHeight, camShift, VH_MAX, CAM_TOP, CAM_BOTTOM, camTargetY, VW, VH, ACC, DEC, FRC, TOP, SLOPE, GRAV, JUMP, MAX_GSP, SPRING_V, PAD_V, INVULN, GROUND_REF, Y_MIN, Y_MAX, PIT_LIMIT, ZONES, TIME_PAR, START_LIVES,
-    BELT_V, SAFE_AFTER, SKINS, LOOP_R, LOOP_W, LOOP_MIN, SCATTER_MAX, CHAIN_POINTS, LIFE_RINGS, DASH_BASE, SHOES_TIME, INVINC_TIME, rng, buildLevel, groundY, angleAt, newGame, spawn, step, isSpin, canKill, pbox };
+    BELT_V, SAFE_AFTER, SKINS, DROP_SKIN, CRUMBLE_T, CRUMBLE_GONE, platOff, LOOP_R, LOOP_W, LOOP_MIN, SCATTER_MAX, CHAIN_POINTS, LIFE_RINGS, DASH_BASE, SHOES_TIME, INVINC_TIME, rng, buildLevel, groundY, angleAt, newGame, spawn, step, isSpin, canKill, pbox };
 })();
 if (typeof module !== 'undefined') module.exports = LOGIC_SP;

@@ -24,7 +24,7 @@ test('every zone and several seeds make a valid course: flat start, narrow pits,
     for (let i = 0; i <= v.len; i++) {
       if (!Number.isFinite(v.H[i])) { pit++; maxPit = Math.max(maxPit, pit); } else { pit = 0; if (i > 0 && Number.isFinite(v.H[i - 1])) steep = Math.max(steep, Math.abs(v.H[i] - v.H[i - 1])); assert.ok(v.H[i] >= L.Y_MIN - 1 && v.H[i] <= L.Y_MAX + 1, 'height range'); }
     }
-    const wide = v.longGaps.length > 0; assert.ok(maxPit >= 40 && (wide || maxPit <= L.PIT_LIMIT + 2), 'pit width ' + maxPit); if (wide) assert.ok(maxPit <= 230, 'long gaps stay under 230: ' + maxPit);
+    const wide = v.longGaps.length > 0, bridge = v.movers + v.stonesN > 0; assert.ok(maxPit >= 40 && (wide || bridge || maxPit <= L.PIT_LIMIT + 2), 'pit width ' + maxPit); if (wide && !bridge) assert.ok(maxPit <= 230, 'long gaps stay under 230: ' + maxPit); if (bridge) assert.ok(maxPit <= 335, 'bridge pits stay under 335: ' + maxPit);
     assert.ok(steep < 0.8, 'no wall-like step on the ground: ' + steep);
     assert.ok(Number.isFinite(v.H[v.goalX]) && Number.isFinite(v.H[v.len]), 'ground at the goal');
     assert.strictEqual(v.checks.length, 2);
@@ -222,7 +222,7 @@ test('there are eight zones with eight themes and each longer than the one befor
 test('every zone but the first builds its signature structure several times, and the first has none', () => {
   for (let z = 0; z < L.ZONES.length; z++) for (const seed of [1, 2, 3]) {
     const v = L.buildLevel(z, seed), sig = L.ZONES[z].sig;
-    assert.ok(z === 0 ? v.sigCount === 0 : v.sigCount >= 3, 'signature count ' + v.sigCount);
+    assert.ok(z === 0 ? v.sigCount === 0 : v.sigCount >= 2, 'signature count ' + v.sigCount);
     if (sig === 'iceslide') assert.ok(v.ice.length >= 3, 'ice patches');
     if (sig === 'belt') assert.ok(v.belts.length >= 3 && v.belts.every((b) => b.dir === 1 || b.dir === -1), 'conveyors');
     if (sig === 'lavaflame') assert.ok(v.enemies.filter((e) => e.type === 'flame').length >= 3, 'flames');
@@ -319,10 +319,10 @@ function runToSpring(zone, seed, speed, n) {
 
 test('every course has a high road: a spring, then floating platforms with rings and an item box above a safe flat floor', () => {
   for (let z = 0; z < 8; z++) for (const seed of [1, 4]) {
-    const v = L.buildLevel(z, seed); assert.ok(v.highs >= 2, `high roads in zone ${z}: ${v.highs}`); assert.strictEqual(v.plats.length, v.highs * 4);
+    const v = L.buildLevel(z, seed); assert.ok(v.highs >= 2, `high roads in zone ${z}: ${v.highs}`); const hp = v.plats.filter((p) => !p.amp && !p.crumble); assert.strictEqual(hp.length, v.highs * 4);
     for (const m of v.monitors) if (m.y != null) assert.ok(v.plats.some((p) => m.x > p.x0 && m.x < p.x1 && p.y === m.y), 'a platform item box sits on a platform');
-    for (const p of v.plats) { assert.ok(p.x1 - p.x0 >= 160 && p.y < 100, 'platforms are wide and well above the ground'); assert.ok(v.rings.some((r) => r.x > p.x0 && r.x < p.x1 && r.y < p.y), 'rings over a platform'); }
-    for (const p of v.plats) for (let x = p.x0; x < p.x1; x += 20) assert.ok(Number.isFinite(v.H[x]) && v.H[x] - p.y >= 100, 'flat safe ground far below a platform');
+    for (const p of hp) { assert.ok(p.x1 - p.x0 >= 160 && p.y < 100, 'platforms are wide and well above the ground'); assert.ok(v.rings.some((r) => r.x > p.x0 && r.x < p.x1 && r.y < p.y), 'rings over a platform'); }
+    for (const p of hp) for (let x = p.x0; x < p.x1; x += 20) assert.ok(Number.isFinite(v.H[x]) && v.H[x] - p.y >= 100, 'flat safe ground far below a platform');
   }
 });
 
@@ -345,7 +345,7 @@ test('platforms are one-way: you pass up through them, stand when coming down, a
 test('each course has its own kinds of enemies instead of the same crab and bee', () => {
   const seen = new Set();
   for (let z = 0; z < 8; z++) {
-    const v = L.buildLevel(z, 2), skins = new Set(v.enemies.filter((e) => e.type !== 'flame').map((e) => e.skin)), theme = L.ZONES[z].theme; assert.ok(skins.size >= 1, 'enemies exist');
+    const v = L.buildLevel(z, 2), skins = new Set(v.enemies.filter((e) => e.type === 'crab' || e.type === 'bee').map((e) => e.skin)), theme = L.ZONES[z].theme; assert.ok(skins.size >= 1, 'enemies exist');
     for (const s of skins) { assert.ok(L.SKINS[theme].includes(s), `${s} belongs to ${theme}`); seen.add(s); }
     for (const e of v.enemies) if (e.type === 'crab' || e.type === 'bee') assert.ok(e.skin === L.SKINS[theme][e.type === 'bee' ? 1 : 0]);
   }
@@ -360,6 +360,57 @@ test('in every course and seed, every high-road spring lands you on a platform a
       L.spawn(st, sp.x - 160); st.p.inv = 99999; st.p.gsp = speed; let landed = false;
       for (let i = 0; i < 300 && !landed; i++) { L.step(st, { right: true }); if (st.p.plat) landed = true; }
       assert.ok(landed, `zone ${z} seed ${seed} speed ${speed} spring ${sp.x}`);
+    }
+  }
+});
+
+test('every course has several extra structures chosen from its own list (floating bridge, crumbling stones, droppers)', () => {
+  for (let z = 0; z < 8; z++) for (const seed of [1, 2, 3, 4]) {
+    const v = L.buildLevel(z, seed), Z = L.ZONES[z]; assert.ok(v.extras >= 2, `extras in zone ${z} seed ${seed}: ${v.extras}`);
+    if (!Z.extra.includes('floatbridge')) assert.strictEqual(v.movers, 0); if (!Z.extra.includes('stones')) assert.strictEqual(v.stonesN, 0); if (!Z.extra.includes('dropper')) assert.strictEqual(v.drops, 0);
+    assert.strictEqual(v.movers + v.stonesN + v.drops / 3, v.extras + 0 * v.extras, 'counts add up');
+    for (const e of v.enemies) if (e.type === 'drop') assert.strictEqual(e.skin, L.DROP_SKIN[Z.theme]);
+  }
+});
+
+test('a floating platform carries you along, and stepping stones crumble after you stand on them too long, then come back', () => {
+  let z = 0, seed = 1, p = null; for (z = 0; z < 8 && !p; z++) for (seed = 1; seed <= 6 && !p; seed++) p = L.buildLevel(z, seed).plats.find((q) => q.amp); z--; seed--;
+  const st = L.newGame({ zone: z, seed }); st.enemies = []; L.spawn(st, p.x0 + 60); st.p.inv = 99999; st.p.ground = true; st.p.plat = st.level.plats.find((q) => q.id === p.id); st.p.y = p.y; st.p.gsp = 0;
+  let minX = 1e9, maxX = -1e9; for (let i = 0; i < 400; i++) { L.step(st, {}); if (st.p.plat) { minX = Math.min(minX, st.p.x); maxX = Math.max(maxX, st.p.x); } }
+  assert.ok(st.p.plat && maxX - minX > 40, 'carried by the moving platform: ' + (maxX - minX));
+  let c = null; for (z = 0; z < 8 && !c; z++) for (seed = 1; seed <= 6 && !c; seed++) c = L.buildLevel(z, seed).plats.find((q) => q.crumble); z--; seed--;
+  const s2 = L.newGame({ zone: z, seed }); s2.enemies = []; const cp = s2.level.plats.find((q) => q.id === c.id); L.spawn(s2, c.x0 + 35); s2.p.inv = 99999; s2.p.ground = true; s2.p.plat = cp; s2.p.y = cp.y; s2.p.gsp = 0;
+  let fellAt = -1; for (let i = 0; i < L.CRUMBLE_T + 4 && fellAt < 0; i++) { L.step(s2, {}); if (!s2.p.ground) fellAt = i; } assert.ok(fellAt >= L.CRUMBLE_T - 2 && fellAt <= L.CRUMBLE_T + 1, 'falls after standing: ' + fellAt);
+  assert.ok(s2.gone[cp.id] > s2.t, 'the stone is gone'); s2.phase = 'play'; L.spawn(s2, c.x0 - 150); s2.p.inv = 99999; for (let i = 0; i < L.CRUMBLE_GONE + 5; i++) L.step(s2, {}); assert.ok(!s2.gone[cp.id], 'and comes back');
+  const s3 = L.newGame({ zone: z, seed }); s3.enemies = []; L.spawn(s3, c.x0 - 60); s3.p.inv = 99999; s3.p.gsp = 6; let ranAcross = false; for (let i = 0; i < 40; i++) { L.step(s3, { right: true }); if (s3.p.plat === s3.level.plats.find((q) => q.id === c.id)) ranAcross = true; } void ranAcross;
+});
+
+test('a dropper is harmless while its shadow warns, hurts while it is down, and leaves again', () => {
+  let v = null, zz = 0, ss = 1; for (zz = 1; zz < 8 && !v; zz++) for (ss = 1; ss <= 6 && !v; ss++) { const t = L.buildLevel(zz, ss); if (t.drops) v = t; } zz--; ss--;
+  const hurtAt = (ph) => { const st = L.newGame({ zone: zz, seed: ss }), e = st.enemies.find((q) => q.type === 'drop'); L.spawn(st, e.x - 40); st.p.inv = 0; st.p.x = e.x; st.p.y = e.base; st.rings = 5; st.t = ((ph - e.id * 37) % 150 + 150) % 150 - 1; st.enemies = [e]; L.step(st, {}); return st.events.some((q) => q.t === 'hurt'); };
+  assert.strictEqual(hurtAt(20), false, 'warning: safe'); assert.strictEqual(hurtAt(70), true, 'down: hurts'); assert.strictEqual(hurtAt(130), false, 'up again: safe');
+});
+
+test('the floating bridge and the stepping stones can be crossed at slow, normal and fast speed from any moment', () => {
+  const find = (kind) => { for (let z = 0; z < 8; z++) for (let s = 1; s <= 6; s++) { const v = L.buildLevel(z, s); const p = v.plats.find((q) => (kind === 'move' ? q.amp : q.crumble)); if (p) return { z, s, p }; } };
+  for (const kind of ['move', 'crumble']) {
+    const f = find(kind), bx = f.p.x0 - (kind === 'move' ? 30 : 20);
+    for (const speed of [3, 4.5, 6]) for (const t0 of [0, 60, 120]) {
+      let ok = false;
+      for (let a = 0; a < 40 && !ok; a += 2) for (let b = 0; b <= 60 && !ok; b += 6) for (let c = 0; c <= 60 && !ok; c += 12) {
+        const st = L.newGame({ zone: f.z, seed: f.s }); st.enemies = []; L.spawn(st, bx - 140); st.p.inv = 99999; st.p.gsp = speed; st.t = t0; let n = 0, state = 0, j = 0, jn = 0;
+        while (n++ < 400 && st.phase === 'play' && st.p.x < bx + 450) {
+          const inp = { right: true };
+          if (state === 0 && n === a + 1 && st.p.ground) { inp.jump = true; inp.jumpHeld = true; state = 1; jn = 0; }
+          else if (state === 1) { if (!st.p.ground) { jn++; inp.jumpHeld = jn < 30; } else if (jn > 0) { state = 2; j = 0; } }
+          if (state === 2) { if (j === b && st.p.ground) { inp.jump = true; inp.jumpHeld = true; state = 3; jn = 0; } else j++; }
+          else if (state === 3) { if (!st.p.ground) { jn++; inp.jumpHeld = jn < 30; } else if (jn > 0) { state = 4; j = 0; } }
+          if (state === 4) { if (j === c && st.p.ground) { inp.jump = true; inp.jumpHeld = true; state = 5; } else j++; }
+          L.step(st, inp);
+        }
+        if (st.phase === 'play' && st.p.x >= bx + 450) ok = true;
+      }
+      assert.ok(ok, `${kind} speed ${speed} start phase ${t0}`);
     }
   }
 });

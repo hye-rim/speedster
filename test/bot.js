@@ -3,7 +3,7 @@
 // 「그냥 달리기 / 구르기 / 크게 뛰기 / 낮게 뛰기」를 각각 100프레임쯤 미리 돌려 보고, 다치거나 죽지 않고 가장 멀리 가는 것을 고른다.
 // 사람이 길을 읽고 고르는 것과 같다. 코스에 건널 길이 있는지 확인하는 데 쓴다.
 const L = require('../logic.js');
-function clone(st) { return { ...st, p: { ...st.p }, enemies: st.enemies.map((e) => ({ ...e })), scatter: st.scatter.map((s) => ({ ...s })), got: new Set(st.got), events: [] }; }
+function clone(st) { return { ...st, p: { ...st.p }, enemies: st.enemies.map((e) => ({ ...e })), scatter: st.scatter.map((s) => ({ ...s })), got: new Set(st.got), cr: { ...st.cr }, gone: { ...st.gone }, events: [] }; }
 const PLANS = [
   { name: 'run', roll: 0, jump: false, hold: true, delay: 0 },
   { name: 'roll', roll: 50, jump: false, hold: true, delay: 0 },

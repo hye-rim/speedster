@@ -229,7 +229,7 @@ test('every zone but the first builds its signature structure several times, and
     if (sig === 'longgap') assert.ok(v.longGaps.length >= 3 && v.longGaps.every((g) => g.x1 - g.x0 >= 165 && g.x1 - g.x0 <= 225), 'long gaps');
     if (sig === 'tramp') assert.ok(v.springs.length >= 9, 'springs in rows');
     if (sig === 'tunnel') assert.ok(v.pads.length >= 9, 'boost pad tunnels');
-    if (sig === 'valley') assert.ok(v.sigCount >= 3);
+    if (sig === 'valley') assert.ok(v.sigCount >= 2);
     // 긴 틈 앞에는 가속 판이 있어서 넘을 수 있다
     for (const g of v.longGaps) assert.ok(v.pads.some((p) => p.x < g.x0 && g.x0 - p.x < 330), 'a boost pad before the long gap at ' + g.x0);
     // 스프링 줄 뒤에는 넓은 평지

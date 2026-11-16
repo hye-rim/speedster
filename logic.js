@@ -19,20 +19,20 @@ const LOGIC_SP = (() => {
   const SCATTER_MAX = 32, CHAIN_POINTS = [100, 200, 500, 1000], LIFE_RINGS = 100;      // 맞으면 링이 최대 32개 흩어짐 · 연속 처치 점수 · 링 100개마다 목숨 하나
   const DASH_BASE = 8, DASH_MAX_CHARGE = 8, SHOES_TIME = 20 * 60, INVINC_TIME = 15 * 60;   // 스핀 대시 · 신발·무적 시간
   const LOOP_R = 40, LOOP_W = 36, LOOP_MIN = 5;                                              // 루프: 반지름·폭, 이 속도 이상으로 들어가야 한 바퀴 돈다
-  const TIME_PAR = [75, 85, 95, 105, 115, 125, 135, 150];        // 이 시간(초) 안에 끝내면 시간 보너스
+  const TIME_PAR = [90, 102, 114, 126, 138, 150, 162, 180];        // 이 시간(초) 안에 끝내면 시간 보너스
   const SAFE_AFTER = 580;                                        // 스프링·점프대·긴 틈 뒤로 이만큼은 위험물을 안 둔다
   const BELT_V = 1.3;                                            // 컨베이어가 밀어 주는 속도(px/프레임)
   // 코스 8개: 테마와 코스마다 고유한 구조(sig)가 있다. 골라 쓰는 sig 는 구간 생성 함수가 맡는다.
   //  valley 깊은 계곡 · tramp 스프링 줄 · iceslide 미끄러운 얼음 내리막 · lavaflame 용암 구멍에서 튀는 불꽃 · belt 컨베이어 · tunnel 가속 판 터널 · longgap 가속 판으로 넘는 긴 틈
   const ZONES = [
-    { name: '초원 언덕', theme: 'grass', len: 16000, pit: 0.10, enemy: 0.30, spike: 0.00, hill: 46, sig: null, sigP: 0, extra: ['floatbridge', 'stones'] },
-    { name: '모래 협곡', theme: 'desert', len: 17500, pit: 0.14, enemy: 0.34, spike: 0.06, hill: 54, sig: 'valley', sigP: 0.20, extra: ['stones', 'dropper'] },
-    { name: '정글 숲', theme: 'jungle', len: 19000, pit: 0.14, enemy: 0.38, spike: 0.06, hill: 56, sig: 'tramp', sigP: 0.18, extra: ['floatbridge', 'stones'] },
-    { name: '얼음 능선', theme: 'ice', len: 20500, pit: 0.16, enemy: 0.40, spike: 0.10, hill: 60, sig: 'iceslide', sigP: 0.20, extra: ['stones', 'dropper'] },
-    { name: '용암 화산', theme: 'lava', len: 22000, pit: 0.18, enemy: 0.42, spike: 0.12, hill: 62, sig: 'lavaflame', sigP: 0.22, extra: ['stones', 'dropper'] },
-    { name: '번개 공장', theme: 'factory', len: 23500, pit: 0.20, enemy: 0.46, spike: 0.14, hill: 64, sig: 'belt', sigP: 0.22, extra: ['floatbridge', 'dropper'] },
-    { name: '네온 도시', theme: 'neon', len: 25000, pit: 0.22, enemy: 0.48, spike: 0.16, hill: 66, sig: 'tunnel', sigP: 0.22, extra: ['floatbridge', 'stones'] },
-    { name: '구름 섬', theme: 'sky', len: 27000, pit: 0.24, enemy: 0.50, spike: 0.18, hill: 68, sig: 'longgap', sigP: 0.22, extra: ['stones', 'floatbridge'] },
+    { name: '초원 언덕', theme: 'grass', len: 19200, pit: 0.10, enemy: 0.30, spike: 0.00, hill: 46, sig: null, sigP: 0, style: 'rollers', roll: 0.55, extra: ['floatbridge', 'stones'] },
+    { name: '모래 협곡', theme: 'desert', len: 21000, pit: 0.14, enemy: 0.34, spike: 0.06, hill: 54, sig: 'valley', sigP: 0.20, style: 'dunes', roll: 0.5, extra: ['stones', 'dropper'] },
+    { name: '정글 숲', theme: 'jungle', len: 22800, pit: 0.14, enemy: 0.38, spike: 0.06, hill: 56, sig: 'tramp', sigP: 0.18, style: 'bumps', roll: 0.6, extra: ['floatbridge', 'stones'] },
+    { name: '얼음 능선', theme: 'ice', len: 24600, pit: 0.16, enemy: 0.40, spike: 0.10, hill: 60, sig: 'iceslide', sigP: 0.20, style: 'longslope', roll: 0.45, extra: ['stones', 'dropper'] },
+    { name: '용암 화산', theme: 'lava', len: 26400, pit: 0.18, enemy: 0.42, spike: 0.12, hill: 62, sig: 'lavaflame', sigP: 0.22, style: 'sawtooth', roll: 0.55, extra: ['stones', 'dropper'] },
+    { name: '번개 공장', theme: 'factory', len: 28200, pit: 0.20, enemy: 0.46, spike: 0.14, hill: 64, sig: 'belt', sigP: 0.22, style: 'plateaus', roll: 0.5, extra: ['floatbridge', 'dropper'] },
+    { name: '네온 도시', theme: 'neon', len: 30000, pit: 0.22, enemy: 0.48, spike: 0.16, hill: 66, sig: 'tunnel', sigP: 0.22, style: 'highway', roll: 0.4, extra: ['floatbridge', 'stones'] },
+    { name: '구름 섬', theme: 'sky', len: 32400, pit: 0.24, enemy: 0.50, spike: 0.18, hill: 68, sig: 'longgap', sigP: 0.22, style: 'islands', roll: 0.5, extra: ['stones', 'floatbridge'] },
   ];
 
   const rng = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
@@ -44,7 +44,7 @@ const LOGIC_SP = (() => {
   function buildLevel(zone, seed) {
     const Z = ZONES[zone], rnd = rng(seed * 977 + zone * 31 + 7), len = Z.len;
     const H = new Float32Array(len + 1).fill(Infinity);
-    const L = { zone, name: Z.name, theme: Z.theme, sig: Z.sig, len, H, rings: [], enemies: [], springs: [], pads: [], spikes: [], checks: [], monitors: [], loops: [], ice: [], belts: [], longGaps: [], launches: [], plats: [], highs: 0, pitN: 0, extras: 0, movers: 0, stonesN: 0, drops: 0, sigCount: 0, goalX: len - 260 };
+    const L = { zone, name: Z.name, theme: Z.theme, sig: Z.sig, len, H, rings: [], enemies: [], springs: [], pads: [], spikes: [], checks: [], monitors: [], loops: [], ice: [], belts: [], longGaps: [], launches: [], plats: [], highs: 0, pitN: 0, extras: 0, enemyN: 0, movers: 0, stonesN: 0, drops: 0, sigCount: 0, goalX: len - 260 };
     let x = 0, y = GROUND_REF;
     const smooth = (x0, y0, x1, y1) => { for (let i = x0; i <= x1 && i <= len; i++) { const t = (i - x0) / Math.max(1, x1 - x0), s = t * t * (3 - 2 * t); H[i] = y0 + (y1 - y0) * s; } };
     const flat = (n) => { smooth(x, y, x + n, y); const a = x; x += n; return [a, x]; };
@@ -120,12 +120,36 @@ const LOGIC_SP = (() => {
       for (let r = a + 130; r < a + 560; r += 44) L.rings.push({ x: r, y: gy - 20 });
       safeUntil = cx + SAFE_AFTER; L.highs++;
     };
+    // 코스마다 다른 땅의 생김새: 같은 평지 달리기가 아니라 코스마다 언덕·모래언덕·울퉁불퉁·긴 내리막·톱니·계단·고속도로·섬 모양이 이어진다
+    const rise = (dy) => { const up = Math.min(dy, y - Y_MIN); if (up < 14) return null; return slopeTo(-up); };
+    const fall = (dy) => { const dn = Math.min(dy, Y_MAX - y); if (dn < 14) return null; return slopeTo(dn); };
+    const bump = (dy, lenUp, lenDn) => { const ny = clamp(y - dy, Y_MIN, Y_MAX), y0 = y; smooth(x, y0, x + lenUp, ny); x += lenUp; y = ny; smooth(x, y, x + lenDn, y0); x += lenDn; y = y0; };
+    const terrain = (style) => {
+      const n0 = x;
+      if (style === 'rollers') { const n = 2 + Math.floor(rnd() * 2); for (let k = 0; k < n; k++) { const amp = 40 + Math.floor(rnd() * 24), a = rise(amp); if (a) ringsLine(a[0], a[1], 26, 18); const b = fall(amp); if (b) ringsLine(b[0], b[1], 26, 18); if (!a && !b) flat(200); } }
+      else if (style === 'dunes') { for (let k = 0; k < 3; k++) { const a = rise(30 + Math.floor(rnd() * 24)); if (a) ringsLine(a[0], a[1], 26, 18); const dy = Math.min(46, Y_MAX - y); if (dy > 16) { const y0 = y; smooth(x, y0, x + 100, y0 + dy); x += 100; y = y0 + dy; flat(60); } else flat(120); } }
+      else if (style === 'bumps') { for (let k = 0; k < 7; k++) { bump(14 + Math.floor(rnd() * 12), 70, 70); } ringsLine(n0, x, 40, 24); }
+      else if (style === 'longslope') { const dn = Math.min(80, Y_MAX - y); if (dn > 30) { const y0 = y; smooth(x, y0, x + dn * 11, y0 + dn); ringsLine(x, x + dn * 11, 30, 22); x += dn * 11; y = y0 + dn; } flat(200); rise(60); }
+      else if (style === 'sawtooth') { for (let k = 0; k < 5; k++) bump(30 + Math.floor(rnd() * 14), 110, 90); ringsLine(n0, x, 36, 22); }
+      else if (style === 'plateaus') { for (let k = 0; k < 3; k++) { flat(150); if (k % 2 === 0) fall(36); else rise(36); } }
+      else if (style === 'highway') { flat(300); const a = rise(60); if (a) ringsLine(a[0], a[1], 26, 18); flat(260); fall(60); }
+      else if (style === 'islands') { for (let k = 0; k < 2; k++) { rise(46); flat(220); fall(46); flat(80); } }
+      if (y < Y_MIN + 5 || y > Y_MAX - 5) slopeTo(GROUND_REF - y);
+      return x > n0;
+    };
+    const enemySeg = () => {                                         // 적 구간: 땅을 걷거나 날아다니는 적 2~3마리
+      guard(); L.enemyN++;
+      const [a, b] = flat(300 + Math.floor(rnd() * 120)); ringsLine(a, b);
+      const n = 2 + Math.floor(rnd() * 2);
+      for (let k = 0; k < n; k++) { const ex = a + 70 + k * ((b - a - 140) / Math.max(1, n - 1)); const fly = rnd() < 0.35; L.enemies.push({ type: fly ? 'bee' : 'crab', skin: SKINS[Z.theme][fly ? 1 : 0], x: ex, y: fly ? H[Math.floor(ex)] - 34 : H[Math.floor(ex)], home: ex, range: 60 }); }
+    };
     flat(420);
     for (let i = 150; i <= 390; i += 40) L.rings.push({ x: i, y: GROUND_REF - 22 });                  // 처음 평지에 링 몇 개(처음 해 보는 사람이 링을 먹어 볼 수 있게)
     let nextCheck = 1;
     while (x < len - 1000) {
       const q = rnd();
       if (L.checks.length < 2 && x > len * nextCheck / 3) { const [a] = flat(160); L.checks.push({ x: a + 80 }); nextCheck++; continue; }
+      if (Z.style && x > 700 && x < len - 1800 && x >= safeUntil && rnd() < Z.roll) terrain(Z.style);      // 땅 모양(언덕 등)을 먼저 깔고, 같은 차례에 보통 구간도 이어서 만든다
       if ((q < 0.10 || L.loops.length < Math.floor(x / len * 4)) && x > 900) {                                  // 루프: 앞에 달릴 평지, 루프, 뒤에 평지. 링이 원을 따라 놓인다
         flat(300); const lx = x; flat(LOOP_W + 140); L.loops.push({ x: lx, y: y });
         for (let k = 1; k <= 10; k++) { const th = k / 11 * Math.PI * 2; L.rings.push({ x: lx + LOOP_R * Math.sin(th) + LOOP_W * th / (Math.PI * 2), y: y - LOOP_R * (1 - Math.cos(th)) - 10 }); }
@@ -135,9 +159,10 @@ const LOGIC_SP = (() => {
         const [a, b] = flat(240); const kinds = zone === 0 ? ['ring10', 'shield'] : ['ring10', 'ring10', 'shield', 'shield', 'shoes', 'invincible', 'life'];
         L.monitors.push({ x: a + 110, type: kinds[Math.floor(rnd() * kinds.length)] }); ringsLine(a, b); continue;
       }
-      if (x > 1400 && x < len - 2600 && L.highs < 1 + Math.floor(x / len * 3)) { highroad(); continue; }
+      if (x > 1400 && x < len - 2600 && L.highs < 1 + Math.floor(x / len * 2)) { highroad(); continue; }
       if (x > 2200 && x < len - 2800 && L.extras < Math.floor(x / len * 3.5) && Z.extra) { if (signature(Z.extra[Math.floor(rnd() * Z.extra.length)])) { L.extras++; if (y < Y_MIN + 5 || y > Y_MAX - 5) slopeTo(GROUND_REF - y); continue; } }
       if (Z.sig && x > 900 && x < len - 1400 && (rnd() < Z.sigP || L.sigCount < Math.floor(x / len * 5))) { if (signature(Z.sig)) { L.sigCount++; if (y < Y_MIN + 5 || y > Y_MAX - 5) slopeTo(GROUND_REF - y); continue; } }
+      if (x > 1000 && x < len - 1500 && L.enemyN < Math.floor(x / len * 7 * (0.5 + zone * 0.12))) { enemySeg(); continue; }      // 적 구간도 코스마다 꼭 몇 개는 있게
       let r = rnd(); if (x > 1800 && L.pitN < Math.floor(x / len * 3)) r = 0;                        // 구멍도 코스마다 꼭 몇 개는 있게
       if (r < Z.pit + 0.14 + Z.enemy + Z.spike) guard();                               // 구멍·점프대·적·가시는 날아가는 곳 뒤 안전 구간 밖에서만
       if (r < Z.pit) {                                           // 구멍: 앞은 평평하게
@@ -149,9 +174,7 @@ const LOGIC_SP = (() => {
         const [a, b] = slopeTo(-Math.min(46, y - Y_MIN));
         if (b - a > 20) { L.launches.push(b); safeUntil = b + SAFE_AFTER; const w = 60 + Math.floor(rnd() * 40); for (let k = 0; k < 6; k++) L.rings.push({ x: b + 10 + k * (w / 5), y: y - 40 - Math.sin(k / 5 * Math.PI) * 30 }); const drop = Math.min(30, Y_MAX - y); x += w; y += drop; smooth(x, y, x + 160, y); const c = x; x += 160; ringsLine(c, x); }
       } else if (r < Z.pit + 0.14 + Z.enemy) {                    // 적 구간
-        const [a, b] = flat(300 + Math.floor(rnd() * 120)); ringsLine(a, b);
-        const n = 2 + Math.floor(rnd() * 2);
-        for (let k = 0; k < n; k++) { const ex = a + 70 + k * ((b - a - 140) / Math.max(1, n - 1)); const fly = rnd() < 0.35; L.enemies.push({ type: fly ? 'bee' : 'crab', skin: SKINS[Z.theme][fly ? 1 : 0], x: ex, y: fly ? H[Math.floor(ex)] - 34 : H[Math.floor(ex)], home: ex, range: 60 }); }
+        enemySeg();
       } else if (r < Z.pit + 0.14 + Z.enemy + Z.spike) {          // 가시 구간
         const [a, b] = flat(220); for (let k = 0; k < 3; k++) L.spikes.push({ x: a + 80 + k * 16 }); ringsLine(a, b, 32, 40);
       } else if (r < Z.pit + 0.14 + Z.enemy + Z.spike + 0.12) {   // 스프링과 높은 길

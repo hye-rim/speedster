@@ -319,9 +319,9 @@ function runToSpring(zone, seed, speed, n) {
 
 test('every course has a high road: a spring, then floating platforms with rings and an item box above a safe flat floor', () => {
   for (let z = 0; z < 8; z++) for (const seed of [1, 4]) {
-    const v = L.buildLevel(z, seed); assert.ok(v.highs >= 2, `high roads in zone ${z}: ${v.highs}`); const hp = v.plats.filter((p) => !p.amp && !p.crumble); assert.strictEqual(hp.length, v.highs * 4);
+    const v = L.buildLevel(z, seed); assert.ok(v.highs >= 2, `high roads in zone ${z}: ${v.highs}`); const hp = v.plats.filter((p) => p.hr); assert.ok(hp.length >= v.highs * 3 && hp.length <= v.highs * 5, 'platforms per high road');
     for (const m of v.monitors) if (m.y != null) assert.ok(v.plats.some((p) => m.x > p.x0 && m.x < p.x1 && p.y === m.y), 'a platform item box sits on a platform');
-    for (const p of hp) { assert.ok(p.x1 - p.x0 >= 160 && p.y < 100, 'platforms are wide and well above the ground'); assert.ok(v.rings.some((r) => r.x > p.x0 && r.x < p.x1 && r.y < p.y), 'rings over a platform'); }
+    for (const p of hp) { assert.ok(p.x1 - p.x0 >= 130 && p.y < 100, 'platforms are wide and well above the ground'); assert.ok(v.rings.some((r) => r.x > p.x0 && r.x < p.x1 && r.y < p.y), 'rings over a platform'); }
     for (const p of hp) for (let x = p.x0; x < p.x1; x += 20) assert.ok(Number.isFinite(v.H[x]) && v.H[x] - p.y >= 100, 'flat safe ground far below a platform');
   }
 });
@@ -413,4 +413,19 @@ test('the floating bridge and the stepping stones can be crossed at slow, normal
       assert.ok(ok, `${kind} speed ${speed} start phase ${t0}`);
     }
   }
+});
+
+test('inside one course the sections do not repeat: many kinds, never the same one three times in a row, and different high roads', () => {
+  for (let z = 0; z < 8; z++) for (const seed of [1, 2, 3, 4, 5, 6]) {
+    const v = L.buildLevel(z, seed), q = v.seq; assert.ok(new Set(q).size >= 10, `distinct section kinds in zone ${z} seed ${seed}: ${new Set(q).size}`);
+    for (let i = 2; i < q.length; i++) assert.ok(!(q[i] === q[i - 1] && q[i] === q[i - 2]), 'three in a row: ' + q[i]);
+    const hs = q.filter((t) => t.startsWith('highroad')); assert.strictEqual(new Set(hs).size, hs.length, 'each high road has a different shape: ' + hs.join(','));
+    const ts = q.filter((t) => t.startsWith('terrain:')); for (let i = 1; i < ts.length; i++) assert.notStrictEqual(ts[i], ts[i - 1], 'same ground shape twice in a row'); assert.ok(new Set(ts).size >= 2, 'at least two ground shapes: ' + ts.join(','));
+    const en = q.filter((t) => t.startsWith('enemy')); if (en.length >= 3) assert.ok(new Set(en).size >= 2, 'different enemy layouts: ' + en.join(','));
+  }
+});
+
+test('the same course is not simply repeated: two seeds give clearly different layouts of the same zone', () => {
+  for (let z = 0; z < 8; z++) { const a = L.buildLevel(z, 1).seq.join(','), b = L.buildLevel(z, 2).seq.join(','); assert.notStrictEqual(a, b, 'zone ' + z); }
+  const h = (v) => Array.from(v.H.filter((_, i) => i % 50 === 0)).join(','); assert.notStrictEqual(h(L.buildLevel(3, 1)), h(L.buildLevel(3, 2)));
 });

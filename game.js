@@ -5,7 +5,7 @@ const tutorialSignal = (type) => window.dispatchEvent(new CustomEvent('arcade:tu
 // 번개 다람쥐: 화면·입력·소리. 규칙은 logic.js (LOGIC_SP). 여기서는 규칙이 알려 주는 일(events)을 보고 소리·효과를 만든다.
 const L = LOGIC_SP, $ = (id) => document.getElementById(id);
 const TUT = /[?&]tutorial=1(&|$)/.test(location.search);
-let VW = L.VW; const VH = L.VH;                                   // 보이는 가로 범위는 화면 비율에 맞춰 바뀐다(resize)
+let VW = L.VW, VH = L.VH;                                   // 보이는 가로 범위는 화면 비율에 맞춰 바뀐다(resize)
 const cv = $('c'), ctx = cv.getContext('2d');
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -14,7 +14,7 @@ const store = {
 const LAST = L.ZONES.length - 1;
 let unlocked = Math.max(0, Math.min(LAST, store.get('spZone', 0) | 0)), best = store.get('spBest', 0) | 0, soundOn = store.get('spSound', true);
 let G = null, screen = 'title', paused = false, selZone = unlocked, runScore = 0, endT = 0;
-let camX = 0, camY = 0, clock = 0, fx = [], floats = [], shake = 0, banner = null, trail = [];
+let camX = 0, camY = 0, clock = 0, fx = [], floats = [], shake = 0, banner = null, trail = [], squash = 0, runT = 0;
 const TITLE_HTML = $('overlay').innerHTML;
 
 // ---------- 소리 ----------
@@ -57,10 +57,10 @@ function resize() {
   const ctl = $('controls'), controlsH = (!land && getComputedStyle(ctl).display !== 'none') ? ctl.offsetHeight + 8 : 0;
   const sideW = 0;                                                                    // 가로 화면에서도 조작판은 게임 화면 위에 겹치므로 옆자리를 안 뺀다
   const availW = innerWidth - 16 - sideW, availH = innerHeight - 20 - controlsH;
-  VW = L.viewWidth(availW, availH);                                                  // 세로 폰 320 · 가로 폰은 더 넓게(최대 480)
+  VW = L.viewWidth(availW, availH); VH = L.viewHeight(availW, availH, VW);                                                  // 세로 폰 320 · 가로 폰은 더 넓게(최대 480)
   const s = Math.max(0.5, Math.min(availW / VW, availH / VH));
   cssW = VW * s; cv.style.width = VW * s + 'px'; cv.style.height = VH * s + 'px';
-  if (G) camX = Math.max(0, Math.min(G.level.len - VW, camX));
+  if (G) { camX = Math.max(0, Math.min(G.level.len - VW, camX)); camY = L.camTargetY(G.p.y, VH); }
   K = Math.max(1, Math.ceil(s * Math.min(2, window.devicePixelRatio || 1)));
   cv.width = VW * K; cv.height = VH * K;
 }
@@ -127,7 +127,7 @@ function showTitle() {
 }
 function startZone(zone, carry) {
   selZone = zone; G = L.newGame({ zone, seed: TUT ? 1 : (Date.now() % 9973) + 1, score: carry, tutorial: TUT });
-  camX = 0; camY = 0; fx = []; floats = []; shake = 0; trail = []; endT = 0; paused = false; screen = 'play'; releaseAll(); hideOverlay();
+  camX = 0; camY = -L.camShift(VH); squash = 0; runT = 0; fx = []; floats = []; shake = 0; trail = []; endT = 0; paused = false; screen = 'play'; releaseAll(); hideOverlay();
   banner = { text: TUT ? '연습' : `${zone + 1}코스 ${G.level.name}`, sub: TUT ? '달리고 · 뛰고 · 링을 모아 보세요' : (SIG_HINT[G.level.sig] || '골까지 달려요!'), t: 0 };
 }
 const SIG_HINT = { valley: '깊은 계곡! 구르면 엄청 빨라져요', tramp: '스프링 줄! 연달아 튀어 올라요', iceslide: '미끄러운 얼음! 브레이크가 잘 안 들어요', lavaflame: '용암 불꽃! 솟는 때를 봐서 건너요', belt: '컨베이어! 땅이 밀어 줘요', tunnel: '가속 판 터널! 점점 빨라져요', longgap: '긴 틈! 가속 판으로 속도를 붙여 날아요' };
@@ -157,11 +157,12 @@ addEventListener('blur', () => { if (screen === 'play') setPaused(true); });
 
 // ---------- 규칙이 알려 준 일 → 소리와 효과 ----------
 const MON_LABEL = { ring10: '링 +10', shield: '보호막', invincible: '무적!', shoes: '빠른 신발!', life: '1UP!' };
+function dust(x, y, n, sp = 1.4) { for (let i = 0; i < n; i++) fx.push({ x: x + (Math.random() - 0.5) * 8, y: y - 1, vx: (Math.random() - 0.5) * sp * 2, vy: -Math.random() * 0.6, t: 0, life: 14 + Math.random() * 10, color: '#e8dcc0' }); }
 function burst(x, y, color, n, sp = 2) { for (let i = 0; i < n; i++) { const a = Math.random() * 6.283, v = (0.4 + Math.random()) * sp; fx.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 0.6, t: 0, life: 22 + Math.random() * 14, color }); } }
 function handle(events) {
   for (const e of events) {
-    if (e.t === 'ring') { sfx.ring(); tutorialSignal('ring'); }
-    else if (e.t === 'jump') { sfx.jump(); tutorialSignal('jump'); }
+    if (e.t === 'ring') { sfx.ring(); burst(G.p.x, G.p.y - 16, '#ffe27a', 3, 1.2); tutorialSignal('ring'); }
+    else if (e.t === 'jump') { sfx.jump(); dust(G.p.x, G.p.y, 4, 1.2); tutorialSignal('jump'); }
     else if (e.t === 'roll') { sfx.roll(); tutorialSignal('roll'); }
     else if (e.t === 'move') tutorialSignal('move');
     else if (e.t === 'oneup') { sfx.oneup(); floats.push({ x: G.p.x, y: G.p.y - 36, t: 0, text: '1UP!' }); tutorialSignal('oneup'); }
@@ -177,7 +178,7 @@ function handle(events) {
     else if (e.t === 'spring') { sfx.spring(); tutorialSignal('spring'); }
     else if (e.t === 'boost') { sfx.boost(); tutorialSignal('boost'); }
     else if (e.t === 'check') { sfx.check(); floats.push({ x: e.x, y: 80, t: 0, text: '체크포인트' }); }
-    else if (e.t === 'respawn') { camX = Math.max(0, G.p.x - VW * 0.34); camY = 0; trail = []; }
+    else if (e.t === 'respawn') { camX = Math.max(0, G.p.x - VW * 0.34); camY = -L.camShift(VH); trail = []; }
     else if (e.t === 'clear') { tutorialSignal('clear'); burst(G.p.x, G.p.y - 12, '#ffe27a', 24, 3); }
   }
 }
@@ -336,15 +337,17 @@ function drawPlayer() {
     ctx.translate(sx, p.y - 9); ctx.rotate(clock * 22 * face); ctx.fillStyle = '#f08a2a'; ctx.beginPath(); ctx.arc(0, 0, 9, 0, 6.283); ctx.fill(); ctx.fillStyle = '#fff2d0'; ctx.beginPath(); ctx.arc(0, 3, 6, 0, Math.PI); ctx.fill(); ctx.strokeStyle = '#a85010'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 11, 0.4, 2.4); ctx.stroke();
   } else {
     const ang = p.ground ? Math.atan2(L.groundY(G.level, p.x - 6) - L.groundY(G.level, p.x + 6), 12) : 0;
-    ctx.translate(sx, p.y); ctx.rotate(-ang * 0.7 * face); ctx.scale(face, 1);
+    const sq = squash / 8; ctx.translate(sx, p.y); ctx.rotate(-ang * 0.7 * face); ctx.scale(face * (1 + 0.28 * sq), 1 - 0.28 * sq);
     const run = p.ground && Math.abs(p.gsp) > 0.4, step = Math.floor(clock * (6 + spd * 2)) % 2, lean = Math.min(5, spd * 0.6);
-    ctx.fillStyle = '#e07820'; ctx.beginPath(); ctx.ellipse(-8, -14 - lean * 0.3, 6, 11, -0.5 - lean * 0.05, 0, 6.283); ctx.fill();                        // 꼬리
+    ctx.fillStyle = '#e07820'; ctx.beginPath(); ctx.ellipse(-8, -14 - lean * 0.3, 6, 11, -0.5 - lean * 0.05 + Math.sin(clock * (run ? 14 : 4)) * 0.18, 0, 6.283); ctx.fill();                        // 꼬리 (살랑살랑)
     ctx.fillStyle = '#fff2d0'; ctx.beginPath(); ctx.ellipse(-9, -18, 3, 5, -0.5, 0, 6.283); ctx.fill();
     ctx.fillStyle = '#f08a2a'; ctx.beginPath(); ctx.ellipse(lean * 0.5, -13, 7, 9, 0.1 * lean / 5, 0, 6.283); ctx.fill();                                        // 몸
     ctx.fillStyle = '#fff2d0'; ctx.beginPath(); ctx.ellipse(lean * 0.5 + 2, -10, 4, 6, 0, 0, 6.283); ctx.fill();
     ctx.fillStyle = '#f08a2a'; ctx.beginPath(); ctx.arc(2 + lean, -22, 7, 0, 6.283); ctx.fill();                                                            // 머리
     ctx.beginPath(); ctx.moveTo(-1 + lean, -27); ctx.lineTo(0 + lean, -33); ctx.lineTo(4 + lean, -28); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(5 + lean, -22, 3.5, 3.5, 0, 0, 6.283); ctx.fill(); ctx.fillStyle = '#000'; ctx.fillRect(5.5 + lean, -23, 2, 3);
+    if (p.hurt) { ctx.strokeStyle = '#000'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(3 + lean, -24); ctx.lineTo(8 + lean, -20); ctx.moveTo(8 + lean, -24); ctx.lineTo(3 + lean, -20); ctx.stroke(); }          // 맞으면 X 눈
+    else if (Math.floor(clock * 60) % 200 < 6) { ctx.fillStyle = '#000'; ctx.fillRect(3.5 + lean, -22, 4, 1.4); }                                                                               // 가끔 눈 깜빡
+    else { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(5 + lean, -22, 3.5, 3.5, 0, 0, 6.283); ctx.fill(); ctx.fillStyle = '#000'; ctx.fillRect(5.5 + lean, -23, 2, 3); }
     ctx.fillStyle = '#d06818'; ctx.fillRect(1 + lean + 4, -19, 4, 2);
     ctx.fillStyle = '#6a3a12';
     if (!p.ground) { ctx.fillRect(1, -4, 5, 4); ctx.fillRect(-6, -2, 5, 4); }
@@ -374,6 +377,8 @@ function render() {
   ctx.save(); ctx.translate(0, -camY);                                                 // 세계(땅·장치·적·캐릭터·효과)는 세로 카메라만큼 움직인다
   drawTerrain(th); drawObjects(); drawRings();
   for (const e of G.enemies) if (e.alive || false) drawEnemy(e);
+  for (let i = trail.length - 1; i >= 0; i--) { const q = trail[i]; q.t++; if (q.t > 9) { trail.splice(i, 1); continue; } ctx.globalAlpha = 0.32 * (1 - q.t / 9); ctx.fillStyle = '#ff9a3a'; ctx.beginPath(); if (q.spin) ctx.arc(q.x - camX, q.y - 9, 9, 0, 6.283); else ctx.ellipse(q.x - camX, q.y - 13, 7, 11, 0, 0, 6.283); ctx.fill(); }
+  ctx.globalAlpha = 1;
   if (G.phase !== 'dying' || G.p.y < VH + 60) drawPlayer();
   for (let i = fx.length - 1; i >= 0; i--) { const f = fx[i]; f.t++; f.x += f.vx; f.y += f.vy; f.vy += 0.12; if (f.t > f.life) { fx.splice(i, 1); continue; } ctx.globalAlpha = 1 - f.t / f.life; ctx.fillStyle = f.color; ctx.beginPath(); ctx.arc(f.x - camX, f.y, 2.4, 0, 6.283); ctx.fill(); }
   ctx.globalAlpha = 1; ctx.textAlign = 'center'; ctx.font = '900 11px -apple-system, sans-serif';
@@ -386,18 +391,27 @@ function render() {
     ctx.font = '800 11px -apple-system, sans-serif'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.fillStyle = '#fff'; ctx.strokeText(G.level.name, 0, 24); ctx.fillText(G.level.name, 0, 24);
     ctx.fillStyle = '#ffd23a'; for (let i = 0; i < 5; i++) { const a = clock * 2 + i; ctx.fillRect(-60 + i * 30 + Math.cos(a) * 3, -34 + Math.sin(a * 1.3) * 4, 4, 4); } ctx.restore(); ctx.globalAlpha = 1;
   }
-  if (banner && banner.t < 110) { banner.t++; const a = banner.t < 15 ? banner.t / 15 : banner.t > 90 ? (110 - banner.t) / 20 : 1; ctx.globalAlpha = a; ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(0, 70, VW, 44); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffe27a'; ctx.font = '900 18px -apple-system, sans-serif'; ctx.fillText(banner.text, VW / 2, 86); ctx.fillStyle = '#fff'; ctx.font = '700 10px -apple-system, sans-serif'; ctx.fillText(banner.sub, VW / 2, 103); ctx.globalAlpha = 1; }
+  if (banner && banner.t < 90) { banner.t++; const a = banner.t < 12 ? banner.t / 12 : banner.t > 70 ? (90 - banner.t) / 20 : 1; ctx.globalAlpha = a; ctx.fillStyle = 'rgba(0,0,0,.38)'; ctx.fillRect(0, 84, VW, 34); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffe27a'; ctx.font = '900 18px -apple-system, sans-serif'; ctx.fillText(banner.text, VW / 2, 96); ctx.fillStyle = '#fff'; ctx.font = '700 10px -apple-system, sans-serif'; ctx.fillText(banner.sub, VW / 2, 110); ctx.globalAlpha = 1; }
 }
 
 // ---------- 반복 ----------
 let last = performance.now(), acc = 0;
 function tick() {
+  const pg = G.p.ground, pvy = G.p.vy;
   const ev = L.step(G, readInput()) || G.events; handle(G.events);
-  const p = G.p, target = Math.max(0, Math.min(G.level.len - VW, p.x - VW * 0.34 + Math.max(-30, Math.min(70, (p.ground ? p.gsp : p.vx) * 9))));
+  const p = G.p;
+  if (G.phase === 'play' && !p.dead) {                                                // 착지 먼지·찌그러짐, 달릴 때 먼지, 빠를 때 잔상
+    const sp = Math.abs(p.ground ? p.gsp : p.vx);
+    if (p.ground && !pg && pvy > 2.2) { dust(p.x, p.y, 6, 1.8); squash = 8; }
+    if (p.ground && sp > 3.5 && (++runT) % 4 === 0) dust(p.x - (p.face || 1) * 8, p.y, 1, 0.5);
+    if (sp > 8.5 || p.dashRoll) trail.push({ x: p.x, y: p.y, spin: L.isSpin(p) || !!p.loop, face: p.face || 1, t: 0 });
+  }
+  if (squash > 0) squash--;
+  const target = Math.max(0, Math.min(G.level.len - VW, p.x - VW * 0.34 + Math.max(-30, Math.min(70, (p.ground ? p.gsp : p.vx) * 9))));
   camX += (target - camX) * (G.phase === 'dying' ? 0 : 0.14); if (Math.abs(target - camX) > 160) camX = target;
   // 세로 카메라: 캐릭터가 화면 가운데 여유 구간(위 50 ~ 아래 175)을 벗어나면 부드럽게 따라간다. 여유 구간 안에서는 원래 위치(0)로 돌아온다
-  const tY = L.camTargetY(p.y);
-  camY += (tY - camY) * (tY < camY ? 0.22 : 0.1); if (Math.abs(camY) < 0.05) camY = 0;
+  const tY = L.camTargetY(p.y, VH);
+  camY += (tY - camY) * (tY < camY ? 0.22 : 0.1); if (Math.abs(tY - camY) < 0.05) camY = tY;
   if (G.phase === 'clear') { endT++; if (endT % 7 === 0) burst(G.p.x + (Math.random() - 0.5) * 120, G.p.y - 50 - Math.random() * 50, ['#ffd23a', '#ff6a8a', '#6ad8ff', '#9aff7a'][Math.floor(Math.random() * 4)], 12, 3); if (endT === 1) sfx.clear(); if (endT > 170 && screen === 'play') showClear(); }
   if (G.phase === 'over' && screen === 'play') showOver();
 }

@@ -300,3 +300,12 @@ test('a bee never touches a player who is standing or rolling on the ground, so 
     for (let i = 0; i < 300; i++) { st.p.x = e.x; st.p.y = gy; st.p.ground = true; st.p.gsp = 0; st.p.vy = 0; st.p.inv = 0; L.step(st, {}); } assert.strictEqual(st.rings, 3, 'a bee at ' + Math.round(e.x) + ' hurt a standing player');
   } }
 });
+
+test('tall portrait phones show more height, wide screens keep the normal height, and the camera keeps the player in the window', () => {
+  assert.strictEqual(L.viewHeight(640, 340, L.viewWidth(640, 340)), L.VH, 'landscape unchanged');
+  const h = L.viewHeight(359, 600, L.VW_MIN); assert.ok(h > L.VH + 100 && h <= L.VH_MAX, 'portrait taller: ' + h);
+  assert.strictEqual(L.viewHeight(359, 5000, L.VW_MIN), L.VH_MAX, 'capped'); assert.strictEqual(L.viewHeight(359, 150, L.VW_MIN), L.VH, 'never shorter than normal');
+  assert.strictEqual(L.camShift(L.VH), 0);
+  for (const vh of [200, 300, 380]) for (const y of [-300, -65, 0, 60, 150, 190, 260, 400]) { const sy = y - L.camTargetY(y, vh), s = L.camShift(vh); assert.ok(sy - 12 >= L.CAM_TOP + s - 0.01 && sy - 12 <= L.CAM_BOTTOM + s + 0.01 && sy < vh - 8, `inside the window vh=${vh} y=${y} -> ${sy}`); }
+  assert.strictEqual(L.camTargetY(150), L.camTargetY(150, L.VH), 'default is the normal view');
+});

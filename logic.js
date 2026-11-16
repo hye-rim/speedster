@@ -84,7 +84,7 @@ const LOGIC_SP = (() => {
     flat(420);
     for (let i = 150; i <= 390; i += 40) L.rings.push({ x: i, y: GROUND_REF - 22 });                  // 처음 평지에 링 몇 개(처음 해 보는 사람이 링을 먹어 볼 수 있게)
     let nextCheck = 1;
-    while (x < len - 700) {
+    while (x < len - 1000) {
       const q = rnd();
       if ((q < 0.10 || L.loops.length < Math.floor(x / len * 4)) && x > 900) {                                  // 루프: 앞에 달릴 평지, 루프, 뒤에 평지. 링이 원을 따라 놓인다
         flat(300); const lx = x; flat(LOOP_W + 140); L.loops.push({ x: lx, y: y });
@@ -100,7 +100,7 @@ const LOGIC_SP = (() => {
       if (L.checks.length < 2 && x > len * nextCheck / 3) { const [a, b] = flat(160); L.checks.push({ x: a + 80 }); nextCheck++; continue; }
       if (r < Z.pit + 0.14 + Z.enemy + Z.spike) guard();                               // 구멍·점프대·적·가시는 날아가는 곳 뒤 안전 구간 밖에서만
       if (r < Z.pit) {                                           // 구멍: 앞은 평평하게, 구멍 위에 링 곡선
-        const [, b] = flat(120 + Math.floor(rnd() * 80)), w = 70 + Math.floor(rnd() * (PIT_LIMIT - 70));
+        const [, b] = flat(190 + Math.floor(rnd() * 80)), w = 70 + Math.floor(rnd() * (PIT_LIMIT - 70));
         for (let k = 0; k < 7; k++) L.rings.push({ x: b + 8 + k * (w / 6), y: y - 24 - Math.sin(k / 6 * Math.PI) * 38 });
         x += w; smooth(x, y, x + 230, y); const a = x; x += 230; ringsLine(a, x);
       } else if (r < Z.pit + 0.14) {                              // 점프대: 오르막 끝이 갑자기 끊기고 아래에 땅
@@ -336,13 +336,17 @@ const LOGIC_SP = (() => {
 
   // 세로 카메라가 가려는 곳: 캐릭터(몸 중심 py-12)가 화면 위 50 ~ 아래 175 안에 있으면 0, 벗어나면 그만큼 따라간다
   const CAM_TOP = 50, CAM_BOTTOM = 175;
-  function camTargetY(py) { const wy = py - 12; return wy < CAM_TOP ? wy - CAM_TOP : wy > CAM_BOTTOM ? wy - CAM_BOTTOM : 0; }
+  // 세로가 긴 폰 화면에서는 보이는 높이를 늘린다(위쪽을 더 보여 줌). 늘어난 만큼의 60% 는 위쪽 하늘에 쓴다
+  const VH_MAX = 380;
+  const viewHeight = (availW, availH, vw) => vw > VW_MIN ? VH : clamp(Math.round(vw * availH / Math.max(1, availW)), VH, VH_MAX);
+  const camShift = (vh) => Math.round((Math.max(VH, vh) - VH) * 0.6);
+  function camTargetY(py, vh = VH) { const wy = py - 12; return (wy < CAM_TOP ? wy - CAM_TOP : wy > CAM_BOTTOM ? wy - CAM_BOTTOM : 0) - camShift(vh); }
 
   // 화면 비율에 맞춘 보이는 가로 범위: 세로는 항상 200, 가로는 320(세로 폰 화면) ~ 480(아주 넓은 화면). 가로가 넓을수록 앞이 멀리 보인다
   const VW_MIN = 320, VW_MAX = 480;
   const viewWidth = (availW, availH) => clamp(Math.round(VH * availW / Math.max(1, availH)), VW_MIN, VW_MAX);
 
-  return { VW_MIN, VW_MAX, viewWidth, CAM_TOP, CAM_BOTTOM, camTargetY, VW, VH, ACC, DEC, FRC, TOP, SLOPE, GRAV, JUMP, MAX_GSP, SPRING_V, PAD_V, INVULN, GROUND_REF, Y_MIN, Y_MAX, PIT_LIMIT, ZONES, TIME_PAR, START_LIVES,
+  return { VW_MIN, VW_MAX, viewWidth, viewHeight, camShift, VH_MAX, CAM_TOP, CAM_BOTTOM, camTargetY, VW, VH, ACC, DEC, FRC, TOP, SLOPE, GRAV, JUMP, MAX_GSP, SPRING_V, PAD_V, INVULN, GROUND_REF, Y_MIN, Y_MAX, PIT_LIMIT, ZONES, TIME_PAR, START_LIVES,
     BELT_V, SAFE_AFTER, LOOP_R, LOOP_W, LOOP_MIN, SCATTER_MAX, CHAIN_POINTS, LIFE_RINGS, DASH_BASE, SHOES_TIME, INVINC_TIME, rng, buildLevel, groundY, angleAt, newGame, spawn, step, isSpin, canKill, pbox };
 })();
 if (typeof module !== 'undefined') module.exports = LOGIC_SP;

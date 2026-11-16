@@ -27,12 +27,13 @@ function rollout(st, plan, frames) {
   return { dead: c.lives < lives0 || c.phase === 'dying' || c.phase === 'over', hurt, x: c.p.x, ground: c.p.ground };
 }
 function play(zone, seed, opts = {}) {
-  const st = L.newGame({ zone, seed, lives: opts.lives || 99 }); let f = 0, hurts = 0, plan = PLANS[0], planLeft = 0, waitJump = -1;
+  const st = L.newGame({ zone, seed, lives: opts.lives || 99 }); let f = 0, hurts = 0, plan = PLANS[0], planLeft = 0, waitJump = -1, wasAir = false;
   const maxF = 60 * (opts.maxSec || 400), frames = opts.frames || 100; const snaps = [];
   while (st.phase !== 'clear' && st.phase !== 'over' && f < maxF) {
     f++;
     if (opts.onHurt) { snaps.push(clone(st)); if (snaps.length > 140) snaps.shift(); }
     const p = st.p; let inp = { right: true };
+    if (p.ground && wasAir) { planLeft = 0; waitJump = -1; } wasAir = !p.ground;                    // 착지하면 계획을 새로 세운다(착지 직후 바로 앞에 구멍이 있을 수 있다)
     if (st.phase === 'play' && p.ground) {
       const near = (arr, ahead) => arr.some((q) => q.x > p.x && q.x - p.x < ahead);
       const v = Math.max(3, Math.abs(p.gsp)); let pit = false; for (let d = 6; d <= v * 14; d += 6) if (!Number.isFinite(L.groundY(st.level, p.x + d))) { pit = true; break; }

@@ -157,7 +157,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) setPa
 addEventListener('blur', () => { if (screen === 'play') setPaused(true); });
 
 // ---------- 규칙이 알려 준 일 → 소리와 효과 ----------
-const MON_LABEL = { ring10: '링 +10', shield: '보호막', invincible: '무적!', shoes: '빠른 신발!', life: '1UP!' };
+const MON_LABEL = { ring10: '링 +10', shield: '보호막', invincible: '무적!', shoes: '빠른 신발!', life: '1UP!', magnet: '자석!' };
 function dust(x, y, n, sp = 1.4) { for (let i = 0; i < n; i++) fx.push({ x: x + (Math.random() - 0.5) * 8, y: y - 1, vx: (Math.random() - 0.5) * sp * 2, vy: -Math.random() * 0.6, t: 0, life: 14 + Math.random() * 10, color: '#e8dcc0' }); }
 function burst(x, y, color, n, sp = 2) { for (let i = 0; i < n; i++) { const a = Math.random() * 6.283, v = (0.4 + Math.random()) * sp; fx.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 0.6, t: 0, life: 22 + Math.random() * 14, color }); } }
 function handle(events) {
@@ -172,7 +172,7 @@ function handle(events) {
     else if (e.t === 'rev') { sfx.rev(e.charge); tutorialSignal('rev'); }
     else if (e.t === 'spindash') { sfx.dash(); burst(G.p.x - 6 * G.p.face, G.p.y - 2, '#e8e0c0', 10, 2); tutorialSignal('spindash'); }
     else if (e.t === 'loop') { sfx.loop(); tutorialSignal('loop'); }
-    else if (e.t === 'powerend') floats.push({ x: G.p.x, y: G.p.y - 36, t: 0, text: '무적 끝' });
+    else if (e.t === 'powerend') floats.push({ x: G.p.x, y: G.p.y - 36, t: 0, text: e.what === 'magnet' ? '자석 끝' : '무적 끝' });
     else if (e.t === 'kill') { sfx.kill(); burst(e.x, e.y - 8, '#ffd23a', 10, 2.4); floats.push({ x: e.x, y: e.y - 20, t: 0, text: '+' + e.pts }); tutorialSignal('kill'); }
     else if (e.t === 'hurt') { sfx.hurt(); shake = 8; tutorialSignal('hurt'); }
     else if (e.t === 'dead') { sfx.dead(); shake = 6; }
@@ -285,9 +285,10 @@ function drawTerrain(th) {
 function drawRings() {
   const L0 = G.level; ctx.lineWidth = 2;
   for (let i = 0; i < L0.rings.length; i++) {
-    const r = L0.rings[i]; if (G.got.has(i)) continue; const sx = r.x - camX; if (sx < -10 || sx > VW + 10) continue;
+    const r0 = L0.rings[i]; if (G.got.has(i)) continue; const r = G.mag[i] || r0; const sx = r.x - camX; if (sx < -10 || sx > VW + 10) continue;
     const w = Math.abs(Math.cos(clock * 5 + r.x * 0.05)) * 5 + 1.2; ctx.strokeStyle = '#ffd23a'; ctx.beginPath(); ctx.ellipse(sx, r.y, w, 6.5, 0, 0, 6.283); ctx.stroke();
   }
+  if (G.p.magnet > 0 && !G.p.dead) { const blink = G.p.magnet < 180 && Math.floor(G.p.magnet / 6) % 2; if (!blink) { ctx.save(); ctx.strokeStyle = 'rgba(255,100,120,.35)'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 6]); ctx.lineDashOffset = -clock * 30; ctx.beginPath(); ctx.arc(G.p.x - camX, G.p.y - 12, L.MAGNET_R, 0, 6.283); ctx.stroke(); ctx.restore(); } }
   for (const s of G.scatter) { const sx = s.x - camX; ctx.strokeStyle = s.life < 60 && Math.floor(s.life / 4) % 2 ? 'rgba(255,210,58,.3)' : '#ffd23a'; ctx.beginPath(); ctx.ellipse(sx, s.y, 4, 6, 0, 0, 6.283); ctx.stroke(); }
 }
 function drawObjects() {
@@ -308,7 +309,7 @@ function drawObjects() {
   for (let i = 0; i < L0.monitors.length; i++) {                                     // 아이템 상자
     const m = L0.monitors[i]; if (G.mon.has(i)) continue; const sx = m.x - camX; if (sx < -14 || sx > VW + 14) continue; const gy = m.y != null ? m.y : L.groundY(L0, m.x);
     ctx.fillStyle = '#2a2f48'; ctx.fillRect(sx - 9, gy - 22, 18, 22); ctx.fillStyle = '#9aa4c8'; ctx.fillRect(sx - 9, gy - 22, 18, 2); ctx.fillStyle = '#0a1020'; ctx.fillRect(sx - 7, gy - 20, 14, 14);
-    const icon = { ring10: ['#ffd23a', '◯'], shield: ['#5ac0ff', '◍'], invincible: ['#ffffff', '★'], shoes: ['#ff6a4a', '»'], life: ['#ff8aa8', '♥'] }[m.type]; ctx.fillStyle = icon[0]; ctx.font = '900 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(icon[1], sx, gy - 13);
+    const icon = { ring10: ['#ffd23a', '◯'], shield: ['#5ac0ff', '◍'], invincible: ['#ffffff', '★'], shoes: ['#ff6a4a', '»'], life: ['#ff8aa8', '♥'], magnet: ['#ff5a6a', 'U'] }[m.type]; ctx.fillStyle = icon[0]; ctx.font = '900 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(icon[1], sx, gy - 13);
   }
   for (const k of L0.spikes) { const sx = k.x - camX; if (sx < -12 || sx > VW + 12) continue; const gy = L.groundY(L0, k.x); ctx.fillStyle = '#d8dce8'; ctx.beginPath(); ctx.moveTo(sx - 8, gy); ctx.lineTo(sx, gy - 14); ctx.lineTo(sx + 8, gy); ctx.fill(); ctx.fillStyle = '#8a90a8'; ctx.beginPath(); ctx.moveTo(sx, gy - 14); ctx.lineTo(sx + 8, gy); ctx.lineTo(sx + 2, gy); ctx.fill(); }
   for (const s of L0.springs) { const sx = s.x - camX; if (sx < -14 || sx > VW + 14) continue; const gy = L.groundY(L0, s.x); ctx.fillStyle = '#e83a3a'; ctx.fillRect(sx - 9, gy - 5, 18, 5); ctx.strokeStyle = '#d8d8e8'; ctx.lineWidth = 3; ctx.beginPath(); for (let i = 0; i < 4; i++) { ctx.moveTo(sx - 6, gy - 6 - i * 3); ctx.lineTo(sx + 6, gy - 8 - i * 3); } ctx.stroke(); ctx.fillStyle = '#ffd23a'; ctx.fillRect(sx - 10, gy - 19, 20, 4); }
@@ -429,7 +430,7 @@ function drawHud() {
   const t = (s, x, y, c = '#fff', a = 'left') => { ctx.textAlign = a; ctx.fillStyle = c; ctx.strokeText(s, x, y); ctx.fillText(s, x, y); };
   t(`SCORE ${G.score}`, 8, 6); t(`TIME ${Math.floor(G.t / 3600)}:${String(Math.floor(G.t / 60) % 60).padStart(2, '0')}`, 8, 20);
   ctx.strokeStyle = '#ffd23a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(14, 41, 4, 5.5, 0, 0, 6.283); ctx.stroke(); t(`× ${G.rings}`, 22, 35, G.rings === 0 ? '#ff7a7a' : '#ffd23a');
-  t(`🐿 × ${Math.max(0, G.lives)}`, 8, 50); if (G.p.shoes > 0) t(`»${Math.ceil(G.p.shoes / 60)}`, 8, 64, '#ff9a6a'); if (G.p.invinc > 0) t(`★${Math.ceil(G.p.invinc / 60)}`, G.p.shoes > 0 ? 40 : 8, 64, '#fff'); if (TUT) t('연습', VW / 2, 6, '#ffe27a', 'center');
+  t(`🐿 × ${Math.max(0, G.lives)}`, 8, 50); if (G.p.shoes > 0) t(`»${Math.ceil(G.p.shoes / 60)}`, 8, 64, '#ff9a6a'); if (G.p.invinc > 0) t(`★${Math.ceil(G.p.invinc / 60)}`, G.p.shoes > 0 ? 40 : 8, 64, '#fff'); if (G.p.magnet > 0) t(`U${Math.ceil(G.p.magnet / 60)}`, (G.p.shoes > 0 ? 32 : 0) + (G.p.invinc > 0 ? 32 : 0) + 8, 64, '#ff7a8a'); if (TUT) t('연습', VW / 2, 6, '#ffe27a', 'center');
   const sp = Math.abs(G.p.ground ? G.p.gsp : G.p.vx); t(`${Math.round(sp * 60)} px/s`, VW / 2, VH - 14, sp > 7 ? '#ffe27a' : '#fff', 'center');
 }
 function render() {

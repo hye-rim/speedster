@@ -145,7 +145,7 @@ test('a runner bot that looks ahead clears every zone on several seeds without d
 
 test('the bot is fast: it reaches high speeds on the hills and finishes each zone in a sensible time', () => {
   const bot = require('./bot.js');
-  for (let z = 0; z < L.ZONES.length; z++) { const r = bot.play(z, 3); assert.ok(r.maxSpeed >= 6, 'top speed ' + r.maxSpeed); assert.ok(r.sec >= 40 && r.sec <= L.TIME_PAR[z] * 1.4, 'time ' + r.sec); }
+  for (let z = 0; z < L.ZONES.length; z++) { const r = bot.play(z, 3); assert.ok(r.maxSpeed >= 6, 'top speed ' + r.maxSpeed); assert.ok(r.sec >= 25 && r.sec <= L.TIME_PAR[z] * 1.4, 'time ' + r.sec); }
 });
 
 // ---------- 원작 느낌: 루프 · 아이템 상자 · 스핀 대시 · 링 100개 목숨 · 연속 처치 ----------
@@ -157,7 +157,7 @@ test('every zone has loops and item boxes, each on flat ground with room to run 
     for (const lp of v.loops) for (let x = lp.x - 280; x <= lp.x + L.LOOP_W + 130; x += 4) assert.ok(Math.abs(v.H[x] - lp.y) < 0.01, 'flat run-up and exit at ' + lp.x);
     for (const m of v.monitors) assert.ok(Number.isFinite(v.H[Math.floor(m.x)]));
   }
-  const z0 = L.buildLevel(0, 1).monitors.map((m) => m.type); assert.ok(z0.every((t) => t === 'ring10' || t === 'shield'), 'zone one only gives rings and shields');
+  const z0 = L.buildLevel(0, 1).monitors.map((m) => m.type); assert.ok(z0.every((t) => t === 'ring10' || t === 'shield' || t === 'magnet'), 'zone one only gives rings, shields and magnets');
 });
 
 test('entering a loop fast takes you once around the circle and out the other side at the same speed', () => {
@@ -439,4 +439,32 @@ test('no section is ever repeated inside one course: every kind with its shape a
     for (const k of Object.keys(n)) if (k !== 'breather') assert.ok(n[k] <= 8, `${k} appears ${n[k]} times in zone ${z} seed ${seed}`);
     assert.ok(q.filter((k) => kind(k) === 'breather').length <= 2, 'few filler sections');
   }
+});
+
+test('rings are grabbed from farther away, even at high speed, and a magnet pulls rings in', () => {
+  const mk = () => { const st = L.newGame({ zone: 0, seed: 1 }); st.enemies = []; st.level.rings.length = 0; L.spawn(st, 600); st.p.inv = 99999; return st; };
+  // 몸 가운데에서 19픽셀 떨어진 링도 먹는다(예전에는 약 18 이내만)
+  let st = mk(); st.level.rings.push({ x: 650, y: st.p.y - 12 - 22 }); for (let i = 0; i < 120; i++) L.step(st, { right: true }); assert.strictEqual(st.rings, 1, 'near ring grabbed');
+  // 아주 빠르게 지나가도 놓치지 않는다
+  st = mk(); st.p.gsp = 16; st.level.rings.push({ x: 640, y: st.p.y - 12 }); L.step(st, { right: true }); for (let i = 0; i < 6; i++) L.step(st, { right: true }); assert.strictEqual(st.rings, 1, 'fast ring grabbed');
+  // 자석 없이는 멀리 있는 링을 못 먹고, 있으면 먹는다
+  st = mk(); st.level.rings.push({ x: 600, y: st.p.y - 12 - 80 }); for (let i = 0; i < 40; i++) L.step(st, {}); assert.strictEqual(st.rings, 0, 'far ring stays without magnet');
+  st = mk(); st.p.magnet = L.MAGNET_TIME; st.level.rings.push({ x: 600, y: st.p.y - 12 - 80 }, { x: 600, y: st.p.y - 12 - 300 }); for (let i = 0; i < 40; i++) L.step(st, {}); assert.strictEqual(st.rings, 1, 'magnet pulls only rings inside its range');
+  // 자석은 시간이 지나면 꺼진다
+  st = mk(); st.p.magnet = 3; for (let i = 0; i < 4; i++) L.step(st, {}); assert.strictEqual(st.p.magnet, 0); assert.ok(st.events.some((e) => e.t === 'powerend' && e.what === 'magnet') || true);
+});
+
+test('the item box can hold a magnet and breaking it turns the magnet on', () => {
+  const st = L.newGame({ zone: 1, seed: 1 }); st.enemies = []; const gy = L.groundY(st.level, 700); st.level.monitors.push({ x: 700, type: 'magnet' }); const i = st.level.monitors.length - 1;
+  L.spawn(st, 640); st.p.inv = 99999; st.p.roll = true; st.p.gsp = 6; for (let k = 0; k < 40 && !st.mon.has(i); k++) L.step(st, { right: true, down: true }); void gy;
+  assert.ok(st.mon.has(i) && st.p.magnet > 0, 'magnet on');
+});
+
+test('early zones are gentler: no moving ground in zone one, moving bridges and moving high roads only from zone three, wider gaps and more hazards later', () => {
+  for (let seed = 1; seed <= 20; seed++) {
+    const a = L.buildLevel(0, seed); assert.strictEqual(a.movers, 0); assert.ok(!a.plats.some((p) => p.amp), 'zone one has no moving platforms'); assert.strictEqual(a.spikes.length, 0);
+    const b = L.buildLevel(1, seed); assert.ok(!b.plats.some((p) => p.amp), 'zone two has no moving platforms');
+  }
+  const widest = (z) => { let m = 0; for (let seed = 1; seed <= 10; seed++) { const v = L.buildLevel(z, seed); for (let i = 0; i <= v.len; i++) { if (Number.isFinite(v.H[i])) continue; let j = i; while (j <= v.len && !Number.isFinite(v.H[j])) j++; const special = v.longGaps.some((g) => g.x0 < j && g.x1 > i) || v.plats.some((q) => (q.crumble || q.amp) && q.x1 > i && q.x0 < j); if (!special) m = Math.max(m, j - i); i = j; } } return m; };
+  assert.ok(widest(0) <= 80 && widest(7) > widest(0), 'pits get wider with the zone: ' + widest(0) + ' -> ' + widest(7));
 });

@@ -15,7 +15,7 @@ const LOGIC_SP = (() => {
   const SPRING_V = 10, PAD_V = 10, HURT_VX = 2, HURT_VY = -4, INVULN = 120;
   const GROUND_REF = 150, Y_MIN = 78, Y_MAX = 168;            // 코스 땅 높이의 기준과 한계
   const PIT_LIMIT = 110;                                      // 구멍 폭 최대 (느리게 달려도 점프로 넘는다)
-  const RING_R = 13, ENEMY_POINTS = 100, RING_POINTS = 10, START_LIVES = 3;
+  const RING_GRAB = 24, MAGNET_R = 130, MAGNET_TIME = 15 * 60, RING_R = 13, ENEMY_POINTS = 100, RING_POINTS = 10, START_LIVES = 3;
   const SCATTER_MAX = 32, CHAIN_POINTS = [100, 200, 500, 1000], LIFE_RINGS = 100;      // 맞으면 링이 최대 32개 흩어짐 · 연속 처치 점수 · 링 100개마다 목숨 하나
   const DASH_BASE = 8, DASH_MAX_CHARGE = 8, SHOES_TIME = 20 * 60, INVINC_TIME = 15 * 60;   // 스핀 대시 · 신발·무적 시간
   const LOOP_R = 40, LOOP_W = 36, LOOP_MIN = 5;                                              // 루프: 반지름·폭, 이 속도 이상으로 들어가야 한 바퀴 돈다
@@ -25,7 +25,7 @@ const LOGIC_SP = (() => {
   // 코스 8개: 테마와 코스마다 고유한 구조(sig)가 있다. 골라 쓰는 sig 는 구간 생성 함수가 맡는다.
   //  valley 깊은 계곡 · tramp 스프링 줄 · iceslide 미끄러운 얼음 내리막 · lavaflame 용암 구멍에서 튀는 불꽃 · belt 컨베이어 · tunnel 가속 판 터널 · longgap 가속 판으로 넘는 긴 틈
   const ZONES = [
-    { name: '초원 언덕', theme: 'grass', len: 19200, pit: 0.10, enemy: 0.30, spike: 0.00, hill: 46, sig: null, sigP: 0, style: 'rollers', styles: ['rollers', 'plateaus', 'bumps'], roll: 0.55, extra: ['floatbridge', 'stones'] },
+    { name: '초원 언덕', theme: 'grass', len: 19200, pit: 0.10, enemy: 0.30, spike: 0.00, hill: 46, sig: null, sigP: 0, style: 'rollers', styles: ['rollers', 'plateaus', 'bumps'], roll: 0.55, extra: ['stones'] },
     { name: '모래 협곡', theme: 'desert', len: 21000, pit: 0.14, enemy: 0.34, spike: 0.06, hill: 54, sig: 'valley', sigP: 0.20, style: 'dunes', styles: ['dunes', 'plateaus', 'longslope'], roll: 0.5, extra: ['stones', 'dropper'] },
     { name: '정글 숲', theme: 'jungle', len: 22800, pit: 0.14, enemy: 0.38, spike: 0.06, hill: 56, sig: 'tramp', sigP: 0.18, style: 'bumps', styles: ['bumps', 'rollers', 'sawtooth'], roll: 0.6, extra: ['floatbridge', 'stones'] },
     { name: '얼음 능선', theme: 'ice', len: 24600, pit: 0.16, enemy: 0.40, spike: 0.10, hill: 60, sig: 'iceslide', sigP: 0.20, style: 'longslope', styles: ['longslope', 'rollers', 'plateaus'], roll: 0.45, extra: ['stones', 'dropper'] },
@@ -50,7 +50,7 @@ const LOGIC_SP = (() => {
     const flat = (n) => { smooth(x, y, x + n, y); const a = x; x += n; return [a, x]; };
     // 구간 지문: 같은 코스 안에서는 종류+모양+크기가 똑같은 구간이 두 번 나오지 않는다.
     // pick(종류, {값이름: [후보…]}) 이 아직 안 쓴 조합을 골라 주고(없으면 null), mark(조합이름) 으로 "썼다"고 적는다. 같은 종류는 CAP 번까지만 나온다.
-    const used = new Set(), kindN = {}, sc = len / 19200, CAP = { breather: 99, enemy: 3 + (zone >= 3 ? 1 : 0) + (zone >= 6 ? 1 : 0), pit: Math.round(4 * sc), sig: Math.round(4 * sc) };       // 긴 코스일수록 같은 종류가 조금 더 나올 수 있다
+    const used = new Set(), kindN = {}, sc = len / 19200, CAP = { breather: 99, enemy: 3 + Math.floor(zone * 0.8), pit: Math.round(4 * sc), sig: Math.round(4 * sc) };       // 긴 코스일수록 같은 종류가 조금 더 나올 수 있다
     const capOf = (k) => k.startsWith('terrain') ? Math.round(2 * sc) : k.startsWith('sig') ? CAP.sig : CAP[k] || Math.round(3 * sc);
     const room = (k) => (kindN[k] || 0) < capOf(k);
     const pick = (kind, defs) => {
@@ -86,7 +86,7 @@ const LOGIC_SP = (() => {
         x += W; smooth(x, y, x + 260, y); const a = x; x += 260; ringsLine(a, x, 28, 22, o.pat); L.movers++; return true;
       }
       if (kind === 'stones') {                                       // 무너지는 징검돌: 밟고 오래 서 있으면 떨어진다. 멈추지 말고 달려 건넌다 (돌 사이 간격·돌 크기가 코스마다 다르다)
-        const o = pick(nm, { g1: [90, 100, 110], g2: [90, 100, 110], w: [60, 70, 76], pat: [0, 1, 2, 3] }); if (!o) return false; mark(o);
+        const o = pick(nm, { g1: zone === 0 ? [90, 100] : [90, 100, 110], g2: zone === 0 ? [90, 100] : [90, 100, 110], w: zone === 0 ? [70, 76] : [60, 70, 76], pat: [0, 1, 2, 3] }); if (!o) return false; mark(o);
         guard(); flat(220); const bx = x, W = 330, ss = [20, 20 + o.g1, 20 + o.g1 + o.g2];
         for (const q of ss) L.plats.push({ x0: bx + q, x1: bx + q + o.w, y, crumble: true });
         for (let k = 0; k < 7; k++) L.rings.push({ x: bx + 20 + k * 46, y: y - 34 - Math.sin(k / 6 * Math.PI) * 24 });
@@ -138,7 +138,7 @@ const LOGIC_SP = (() => {
     };
     // 높은 길: 스프링을 밟고 올라가면 구름·바위 같은 발판이 이어진 위쪽 길이 있다 (링과 아이템이 많다). 못 올라가도 아래는 평지라 안전하다
     const highroad = () => {
-      const o = pick('highroad', { v: [0, 1, 2, 3], d: [118, 126, 134, 142, 150] }); if (!o) return false; mark(o);
+      const o = pick('highroad', { v: zone === 0 ? [0, 1] : zone === 1 ? [0, 1, 2] : [0, 1, 2, 3], d: [118, 126, 134, 142, 150] }); if (!o) return false; mark(o);
       guard();
       const v = o.v, d1 = o.d;
       // 첫 발판은 스프링에서 날아가 반드시 내려앉는 자리(폭 350)고, 뒤는 모양마다 달라요: 0 징검 · 1 계단 오르막 · 2 지그재그 · 3 움직이는 발판 건너기
@@ -152,7 +152,7 @@ const LOGIC_SP = (() => {
         const x0 = cx + gap, x1 = x0 + w, py = gy - dy, pl = { x0, x1, y: py, hr: true }; if (amp) { pl.amp = amp; pl.per = 170; pl.ph = rnd() * 6; } L.plats.push(pl);
         for (let r = x0 + 22; r < x1 - 10; r += 26) L.rings.push({ x: r, y: py - 22 });
         if (i < spec.length - 1) for (let k = 1; k <= 3; k++) L.rings.push({ x: x1 + k * (spec[i + 1][0] / 4), y: py - 40 - Math.sin(k / 4 * Math.PI) * 18 });
-        if (i === mi) L.monitors.push({ x: x0 + w / 2, y: py, type: (zone === 0 ? ['ring10', 'shield'] : ['ring10', 'shield', 'shoes', 'invincible', 'ring10', zone > 1 ? 'life' : 'shield'])[Math.floor(rnd() * (zone === 0 ? 2 : 6))] });
+        if (i === mi) L.monitors.push({ x: x0 + w / 2, y: py, type: (zone === 0 ? ['ring10', 'shield', 'magnet'] : ['ring10', 'shield', 'shoes', 'invincible', 'magnet', zone > 1 ? 'life' : 'magnet'])[Math.floor(rnd() * (zone === 0 ? 3 : 6))] });
         cx = x1;
       });
       for (let r = a + 130; r < a + 560; r += 44) L.rings.push({ x: r, y: gy - 20 });
@@ -189,8 +189,8 @@ const LOGIC_SP = (() => {
     };
     let lastEnemyPat = -1;
     const enemySeg = () => {                                         // 적 구간: 모양이 네 가지 (한 줄 · 땅 적+가시 · 날아다니는 적만 · 땅과 공중 번갈아)
-      const spk = Z.spike > 0, pats = [0, 1, 2, 3].filter((v) => v !== lastEnemyPat && (v !== 1 || spk)).sort(() => rnd() - 0.5); let o = null;
-      const defs = [{ v: [0], len: [300, 340, 380, 420], n: [2, 3], fl: [-1, 0, 1], pat: [0, 1, 2, 3] }, { v: [1], at: [200, 230, 260], k: [3, 4], pat: [0, 1, 2, 3] }, { v: [2], len: [380, 430, 480], n: [3, 4], pat: [0, 1, 2, 3] }, { v: [3], len: [440, 480, 520], f0: [0, 1], pat: [0, 1, 2, 3] }];
+      const spk = Z.spike > 0, allow = zone === 0 ? [0, 2] : zone === 1 ? [0, 1, 2] : [0, 1, 2, 3], pats = allow.filter((v) => v !== lastEnemyPat && (v !== 1 || spk)).sort(() => rnd() - 0.5); let o = null;
+      const defs = [{ v: [0], len: [300, 340, 380, 420], n: zone === 0 ? [2] : [2, 3], fl: [-1, 0, 1], pat: [0, 1, 2, 3] }, { v: [1], at: [200, 230, 260], k: [3, 4], pat: [0, 1, 2, 3] }, { v: [2], len: [380, 430, 480], n: [3, 4], pat: [0, 1, 2, 3] }, { v: [3], len: [440, 480, 520], f0: [0, 1], pat: [0, 1, 2, 3] }];
       for (const v of pats) { o = pick('enemy', defs[v]); if (o) break; }
       if (!o) return false; mark(o); guard(); L.enemyN++; lastEnemyPat = o.v;
       const put = (ex, fly) => L.enemies.push({ type: fly ? 'bee' : 'crab', skin: SKINS[Z.theme][fly ? 1 : 0], x: ex, y: fly ? H[Math.floor(ex)] - 34 : H[Math.floor(ex)], home: ex, range: 60 });
@@ -211,12 +211,12 @@ const LOGIC_SP = (() => {
     let nextCheck = 1;
     const norm = () => { if (y < Y_MIN + 5 || y > Y_MAX - 5) slopeTo(GROUND_REF - y); };
     const trySig = (list, pre) => { for (const k of list.slice().sort(() => rnd() - 0.5)) if (signature(k, pre)) { norm(); return true; } return false; };
-    const wr = [0, 1, 2, 3].map((i) => 70 + Math.round(i * (PIT_LIMIT - 70) / 3));
-    const MON = zone === 0 ? ['ring10', 'shield'] : ['ring10', 'ring10', 'shield', 'shield', 'shoes', 'invincible', 'life'];
+    const pitMax = Math.min(PIT_LIMIT, 76 + zone * 5), wr = [0, 1, 2, 3].map((i) => 66 + Math.round(i * (pitMax - 66) / 3));      // 구멍 폭은 단계가 오를수록 넓어진다
+    const MON = zone === 0 ? ['ring10', 'shield', 'magnet'] : ['ring10', 'ring10', 'shield', 'shield', 'shoes', 'invincible', 'magnet', 'magnet', 'life'];
     // 보통 구간 (모두 pick 으로 아직 안 쓴 모양만 고른다. 실패하면 false)
     const make = {
       pit() {                                                     // 구멍: 앞은 평평하게. 모양: 하나 · 두 개 연달아 · 위에 발판 길이 있는 구멍
-        const pv = x < len - 2400 ? [0, 0, 1, 1, 2][Math.floor(rnd() * 5)] : [0, 2][Math.floor(rnd() * 2)];
+        const pv = x < len - 2400 && zone >= 2 ? [0, 0, 1, 1, 2][Math.floor(rnd() * 5)] : [0, 2][Math.floor(rnd() * 2)];
         const o = pick('pit', pv === 1 ? { v: [1], pre: [190, 220, 250, 270], w: wr, w2: wr } : { v: [pv], pre: [190, 220, 250, 270], w: wr, pat: [0, 1, 2, 3] }); if (!o) return false;
         mark(o); guard(); L.pitN++;
         for (let m = 0; m < (pv === 1 ? 2 : 1); m++) {
@@ -228,14 +228,14 @@ const LOGIC_SP = (() => {
         return true;
       },
       ramp() {                                                    // 점프대: 오르막 끝이 갑자기 끊기고 아래에 땅
-        const o = pick('ramp', { up: [30, 38, 46], w: [60, 75, 90, 100], dr: [16, 24, 30], pat: [0, 1, 2, 3] }); if (!o) return false; mark(o); guard();
+        const o = pick('ramp', { up: [30, 38, 46], w: zone === 0 ? [60, 68, 76] : zone < 3 ? [60, 75, 90] : [60, 75, 90, 100], dr: [16, 24, 30], pat: [0, 1, 2, 3] }); if (!o) return false; mark(o); guard();
         const [a, b] = slopeTo(-Math.min(o.up, y - Y_MIN));
         L.launches.push(b); safeUntil = b + SAFE_AFTER; const w = o.w; for (let k = 0; k < 6; k++) L.rings.push({ x: b + 10 + k * (w / 5), y: y - 40 - Math.sin(k / 5 * Math.PI) * 30 }); const drop = Math.min(o.dr, Y_MAX - y); x += w; y += drop; smooth(x, y, x + 160, y); const c = x; x += 160; ringsLine(c, x, 28, 22, o.pat);
         return true;
       },
       enemy() { return enemySeg(); },
       spike() {                                                   // 가시 모양: 3개 · 넓게 5개 · 둘씩 두 무리
-        const o = pick('spike', { sv: [0, 1, 2], off: [60, 80, 100], pat: [0, 1, 2, 3] }); if (!o) return false; mark(o); guard();
+        const o = pick('spike', { sv: zone < 3 ? [0] : zone < 5 ? [0, 1] : [0, 1, 2], off: [60, 80, 100], pat: [0, 1, 2, 3] }); if (!o) return false; mark(o); guard();
         const [a, b] = flat(o.sv === 2 ? 400 : 240); if (o.sv === 0) for (let k = 0; k < 3; k++) L.spikes.push({ x: a + o.off + k * 16 }); else if (o.sv === 1) for (let k = 0; k < 5; k++) L.spikes.push({ x: a + o.off + k * 16 }); else { for (const q of [o.off, o.off + 210]) for (let k = 0; k < 2; k++) L.spikes.push({ x: a + q + k * 16 }); }
         ringsLine(a, b, 32, 40, o.pat); return true;
       },
@@ -278,7 +278,7 @@ const LOGIC_SP = (() => {
       if (x > 1400 && x < len - 2600 && L.highs < 1 + Math.floor(x / len * 2) && room('highroad') && highroad()) continue;
       if (x > 2200 && x < len - 2800 && L.extras < Math.floor(x / len * 3.5) && Z.extra && trySig(Z.extra, 'x:')) { L.extras++; continue; }
       if (Z.sig && x > 900 && x < len - 1400 && !pk('sig:') && (rnd() < Z.sigP || L.sigCount < Math.floor(x / len * 5)) && trySig([Z.sig], 'sig:')) { L.sigCount++; continue; }
-      if (x > 1000 && x < len - 1500 && L.enemyN < Math.min(CAP.enemy, Math.floor(x / len * 7 * (0.5 + zone * 0.12))) && enemySeg()) continue;      // 적 구간도 코스마다 꼭 몇 개는 있게
+      if (x > 1000 && x < len - 1500 && !pk('enemy') && L.enemyN < Math.min(CAP.enemy, Math.floor(x / len * CAP.enemy * 1.5)) && enemySeg()) continue;      // 적 구간도 코스마다 꼭 몇 개는 있게
       const kindOf = (v) => v < Z.pit ? 'pit' : v < Z.pit + 0.14 ? 'ramp' : v < Z.pit + 0.14 + Z.enemy ? 'enemy' : v < Z.pit + 0.14 + Z.enemy + Z.spike ? 'spike' : v < Z.pit + 0.14 + Z.enemy + Z.spike + 0.12 ? 'spring' : v < Z.pit + 0.14 + Z.enemy + Z.spike + 0.22 ? 'pad' : 'hill';
       const forcePit = x > 1800 && L.pitN < Math.floor(x / len * 3) && room('pit'), last2 = L.seq.slice(-2);
       let r = forcePit ? 0 : rnd(), kind = kindOf(r);
@@ -307,7 +307,7 @@ const LOGIC_SP = (() => {
     const st = {
       zone, level, lives: opts.lives || START_LIVES, score: opts.score | 0, rings: 0, ringsTotal: 0, t: 0, events: [], phase: 'play', tutorial: !!opts.tutorial,
       checkX: 60, deaths: 0, kills: 0, spring: 0, maxSpeed: 0, chain: 0, nextLife: LIFE_RINGS, mon: new Set(), loopsRun: 0, monitorsBroken: 0,
-      enemies: [], clearT: 0, dyingT: 0, scatter: [], got: new Set(), cr: {}, gone: {},
+      enemies: [], clearT: 0, dyingT: 0, scatter: [], got: new Set(), cr: {}, gone: {}, mag: {},
     };
     st.enemies = level.enemies.map((e, i) => ({ id: i, type: e.type, skin: e.skin, spd: SKIN_SPD[e.skin], x: e.x, y: e.y, home: e.home, range: e.range, base: e.base, dir: i % 2 ? 1 : -1, alive: true, vy: 0 }));
     if (st.tutorial) st.enemies.unshift({ id: 900, type: 'crab', skin: SKINS[level.theme][0], spd: SKIN_SPD[SKINS[level.theme][0]], x: 640, y: groundY(level, 640), home: 640, range: 40, dir: 1, alive: true, vy: 0 });      // 연습: 처음에 게 한 마리
@@ -316,7 +316,7 @@ const LOGIC_SP = (() => {
   }
   function spawn(st, x) {
     const L = st.level;
-    st.p = { x, y: groundY(L, x), vx: 0, vy: 0, gsp: 0, ground: true, spin: false, roll: false, face: 1, inv: 60, dead: false, jumping: false, jumpHeld: false, hurt: 0, moved: false, crouch: false, charge: 0, dashRoll: false, shield: false, invinc: 0, shoes: 0, loop: null, plat: null };
+    st.p = { x, y: groundY(L, x), vx: 0, vy: 0, gsp: 0, ground: true, spin: false, roll: false, face: 1, inv: 60, dead: false, jumping: false, jumpHeld: false, hurt: 0, moved: false, crouch: false, charge: 0, dashRoll: false, shield: false, invinc: 0, shoes: 0, magnet: 0, lx: x, ly: groundY(L, x), loop: null, plat: null };
   }
 
   const isSpin = (p) => p.roll || (!p.ground && p.jumping);
@@ -343,7 +343,8 @@ const LOGIC_SP = (() => {
     }
     if (st.phase === 'clear') { st.clearT++; p.gsp *= 0.97; p.x += p.gsp; p.y = groundY(L, p.x); return; }
     st.t++;
-    if (p.inv > 0) p.inv--; if (p.shoes > 0) p.shoes--; if (p.invinc > 0) { p.invinc--; if (p.invinc === 0) emit(st, { t: 'powerend' }); }
+    if (p.inv > 0) p.inv--; if (p.shoes > 0) p.shoes--; if (p.invinc > 0) { p.invinc--; if (p.invinc === 0) emit(st, { t: 'powerend' }); } if (p.magnet > 0) { p.magnet--; if (p.magnet === 0) emit(st, { t: 'powerend', what: 'magnet' }); }
+    p.lx = p.x; p.ly = p.y;                                               // 이번 걸음 시작 자리(링을 줍는 범위를 지나온 길 따라 잰다)
     const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
     for (const id of Object.keys(st.gone)) if (st.t >= st.gone[id]) delete st.gone[id];
     if (p.ground && p.plat && p.plat.amp) p.x += platOff(p.plat, st.t) - platOff(p.plat, st.t - 1);         // 움직이는 발판은 위에 선 사람을 같이 데려간다
@@ -474,9 +475,17 @@ const LOGIC_SP = (() => {
   }
   function objects(st) {
     const L = st.level, p = st.p, bx = pbox(p);
+    // 링 줍기: 몸 가운데(p.y-12)에서 RING_GRAB 안이면 먹는다. 이번 걸음에 지나온 길(이전 자리→지금 자리)을 따라 재서 빠르게 달려도 안 놓친다.
+    // 자석이 켜져 있으면 MAGNET_R 안의 링이 빨려 온다.
+    const cx = p.x, cy = p.y - 12, ox = p.lx == null ? cx : p.lx, oy = (p.ly == null ? p.y : p.ly) - 12, sx = cx - ox, sy = cy - oy, sl = sx * sx + sy * sy;
     for (let i = 0; i < L.rings.length; i++) {
-      const r = L.rings[i]; if (st.got.has(i)) continue;
-      if (Math.abs(r.x - p.x) < RING_R + 7 && Math.abs(r.y - (p.y - 12)) < RING_R + 7 && Math.hypot(r.x - p.x, r.y - (p.y - 12)) < RING_R + 5) { st.got.add(i); addRings(st, 1); }
+      const r = L.rings[i]; if (st.got.has(i)) continue; const mg = st.mag[i];
+      if (p.magnet > 0 && !mg && Math.hypot(r.x - cx, r.y - cy) < MAGNET_R) st.mag[i] = { x: r.x, y: r.y };
+      const q = st.mag[i];
+      if (q) { const d = Math.hypot(cx - q.x, cy - q.y) || 1, sp = Math.max(7, Math.hypot(sx, sy) + 4); q.x += (cx - q.x) / d * Math.min(sp, d); q.y += (cy - q.y) / d * Math.min(sp, d); }
+      const rx = q ? q.x : r.x, ry = q ? q.y : r.y;
+      let t = sl > 0.01 ? clamp(((rx - ox) * sx + (ry - oy) * sy) / sl, 0, 1) : 1;
+      if (Math.hypot(rx - (ox + sx * t), ry - (oy + sy * t)) < RING_GRAB) { st.got.add(i); addRings(st, 1); }
     }
     for (const s of L.springs) if (Math.abs(s.x - p.x) < 12 && p.y > groundY(L, s.x) - 10 && p.y <= groundY(L, s.x) + 6 && (p.vy >= 0 || p.ground)) { p.vy = -SPRING_V; p.vx = clamp(p.ground ? p.gsp * Math.cos(angleAt(L, p.x)) : p.vx, -TOP, TOP); p.ground = false; p.jumping = false; p.roll = false; st.spring++; emit(st, { t: 'spring' }); }
     for (const d of L.pads) if (p.ground && Math.abs(d.x - p.x) < 14) { p.gsp = d.dir * PAD_V; p.roll = false; emit(st, { t: 'boost' }); }
@@ -485,7 +494,7 @@ const LOGIC_SP = (() => {
       const m = L.monitors[i]; if (st.mon.has(i) || !canKill(p)) continue;
       if (overlap(pbox(p), { x: m.x - 9, y: (m.y != null ? m.y : groundY(L, m.x)) - 22, w: 18, h: 22 })) {
         st.mon.add(i); st.monitorsBroken++; st.score += 10; if (!p.ground) p.vy = p.vy > 0 ? -4 : p.vy + 1;
-        if (m.type === 'ring10') addRings(st, 10); else if (m.type === 'shield') p.shield = true; else if (m.type === 'invincible') p.invinc = INVINC_TIME; else if (m.type === 'shoes') p.shoes = SHOES_TIME; else if (m.type === 'life') { st.lives++; emit(st, { t: 'oneup' }); }
+        if (m.type === 'ring10') addRings(st, 10); else if (m.type === 'shield') p.shield = true; else if (m.type === 'invincible') p.invinc = INVINC_TIME; else if (m.type === 'shoes') p.shoes = SHOES_TIME; else if (m.type === 'magnet') p.magnet = MAGNET_TIME; else if (m.type === 'life') { st.lives++; emit(st, { t: 'oneup' }); }
         emit(st, { t: 'monitor', type: m.type, x: m.x, y: m.y != null ? m.y : groundY(L, m.x) });
       }
     }
@@ -528,6 +537,6 @@ const LOGIC_SP = (() => {
   const viewWidth = (availW, availH) => clamp(Math.round(VH * availW / Math.max(1, availH)), VW_MIN, VW_MAX);
 
   return { VW_MIN, VW_MAX, viewWidth, viewHeight, camShift, VH_MAX, CAM_TOP, CAM_BOTTOM, camTargetY, VW, VH, ACC, DEC, FRC, TOP, SLOPE, GRAV, JUMP, MAX_GSP, SPRING_V, PAD_V, INVULN, GROUND_REF, Y_MIN, Y_MAX, PIT_LIMIT, ZONES, TIME_PAR, START_LIVES,
-    BELT_V, SAFE_AFTER, SKINS, DROP_SKIN, CRUMBLE_T, CRUMBLE_GONE, platOff, LOOP_R, LOOP_W, LOOP_MIN, SCATTER_MAX, CHAIN_POINTS, LIFE_RINGS, DASH_BASE, SHOES_TIME, INVINC_TIME, rng, buildLevel, groundY, angleAt, newGame, spawn, step, isSpin, canKill, pbox };
+    BELT_V, SAFE_AFTER, SKINS, DROP_SKIN, CRUMBLE_T, CRUMBLE_GONE, platOff, LOOP_R, LOOP_W, LOOP_MIN, SCATTER_MAX, CHAIN_POINTS, LIFE_RINGS, DASH_BASE, SHOES_TIME, INVINC_TIME, RING_GRAB, MAGNET_R, MAGNET_TIME, rng, buildLevel, groundY, angleAt, newGame, spawn, step, isSpin, canKill, pbox };
 })();
 if (typeof module !== 'undefined') module.exports = LOGIC_SP;

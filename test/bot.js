@@ -27,7 +27,7 @@ function rollout(st, plan, frames) {
   return { dead: c.lives < lives0 || c.phase === 'dying' || c.phase === 'over', hurt, x: c.p.x, ground: c.p.ground };
 }
 function play(zone, seed, opts = {}) {
-  const st = L.newGame({ zone, seed, lives: opts.lives || 99 }); let f = 0, hurts = 0, plan = PLANS[0], planLeft = 0, waitJump = -1, wasAir = false;
+  const st = L.newGame({ zone, seed, lives: opts.lives || 99 }); let f = 0, hurts = 0, plan = PLANS[0], planLeft = 0, waitJump = -1, wasAir = false; const bad = [];   // bad: 같은 자리에서 죽은 계획(다시 쓰지 않는다)
   const maxF = 60 * (opts.maxSec || 400), frames = opts.frames || 100; const snaps = [];
   while (st.phase !== 'clear' && st.phase !== 'over' && f < maxF) {
     f++;
@@ -37,11 +37,11 @@ function play(zone, seed, opts = {}) {
     if (st.phase === 'play' && p.ground) {
       const near = (arr, ahead) => arr.some((q) => q.x > p.x && q.x - p.x < ahead);
       const v = Math.max(3, Math.abs(p.gsp)); let pit = false; for (let d = 6; d <= v * 14; d += 6) if (!Number.isFinite(L.groundY(st.level, p.x + d))) { pit = true; break; }
-      const hazard = pit || near(st.level.spikes, v * 14) || near(st.level.springs, v * 14) || st.enemies.some((e) => e.alive && e.x > p.x && e.x - p.x < v * 14);
+      const hazard = pit || near(st.level.lows.map((l) => ({ x: l.x0 })), v * 20) || near(st.level.cannons, v * 40) || near(st.level.spikes, v * 14) || near(st.level.springs, v * 14) || st.enemies.some((e) => e.alive && e.x > p.x && e.x - p.x < v * 14);
       if (planLeft > 0) planLeft--;
       if (hazard && (planLeft <= 0 || (pit && plan.roll))) {                                  // 구르는 중에 구멍이 나타나면 다시 계획한다
         let best = null;
-        for (const pl of PLANS) { const r = rollout(st, pl, frames); const score = (r.dead ? -1e6 : 0) + (r.hurt ? -1e4 : 0) + r.x + (pl.name === 'run' ? 0.5 : 0); if (!best || score > best.score) best = { pl, score }; }
+        for (const pl of PLANS) { if (bad.some((b) => Math.abs(b.x - p.x) < 220 && b.name === pl.name && b.n >= 2)) continue; const r = rollout(st, pl, frames); const score = (r.dead ? -1e6 : 0) + (r.hurt ? -1e4 : 0) + r.x + (pl.name === 'run' ? 0.5 : 0); if (!best || score > best.score) best = { pl, score }; }
         plan = best.pl; planLeft = plan.jump ? plan.delay + 4 : plan.roll ? plan.roll : 6; waitJump = plan.jump ? plan.delay : -1; if (plan.roll) inp = { right: true, down: true };
       } else if (planLeft > 0 && plan.roll) inp = { right: true, down: true };
       else if (L.angleAt(st.level, p.x) < -0.12 && Math.abs(p.gsp) > 2) inp = { right: true, down: true };      // 내리막은 굴러서 더 빠르게
@@ -49,7 +49,7 @@ function play(zone, seed, opts = {}) {
     if (waitJump >= 0 && st.phase === 'play' && p.ground) { if (waitJump === 0) { inp = { right: true, jump: true, jumpHeld: plan.hold }; waitJump = -1; } else waitJump--; }
     const before = opts.onHurt ? { x: p.x, y: p.y, ground: p.ground, jumping: p.jumping, roll: p.roll, gsp: p.gsp, vx: p.vx, loop: !!p.loop, plan: plan.name } : null;
     L.step(st, inp);
-    for (const e of st.events) { if (e.t === 'hurt') { hurts++; if (opts.onHurt) opts.onHurt(st, before, snaps); } if (e.t === 'dead' && opts.onDeath) opts.onDeath({ x: Math.round(p.x), why: e.why, f, plan: plan.name }); }
+    for (const e of st.events) { if (e.t === 'hurt') { hurts++; if (opts.onHurt) opts.onHurt(st, before, snaps); } if (e.t === 'dead') { const b = bad.find((q) => Math.abs(q.x - p.x) < 220 && q.name === plan.name); if (b) b.n++; else bad.push({ x: p.x, name: plan.name, n: 1 }); } if (e.t === 'dead' && opts.onDeath) opts.onDeath({ x: Math.round(p.x), why: e.why, f, plan: plan.name }); }
   }
   return { phase: st.phase, sec: Math.round(f / 60), deaths: st.deaths, hurts, rings: st.ringsTotal, score: st.score, x: Math.round(st.p.x), maxSpeed: +st.maxSpeed.toFixed(1), kills: st.kills };
 }

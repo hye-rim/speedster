@@ -40,6 +40,7 @@ const sfx = {
   spring() { tone(300, 0.25, 'sine', 0.06, 800); },
   crumble() { tone(140, 0.3, 'sawtooth', 0.05, -90); tone(90, 0.25, 'square', 0.04, -40, 0.05); },
   boost() { tone(500, 0.3, 'sawtooth', 0.05, 700); },
+  shot() { tone(180, 0.18, 'square', 0.045, -120); },
   check() { tone(880, 0.1, 'triangle', 0.05); tone(1320, 0.14, 'triangle', 0.05, 0, 0.1); },
   oneup() { [660, 880, 1100, 1320].forEach((f, k) => tone(f, 0.12, 'triangle', 0.05, 0, k * 0.08)); },
   monitor() { tone(200, 0.12, 'square', 0.06, 200); tone(800, 0.2, 'triangle', 0.05, 400, 0.08); },
@@ -157,6 +158,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) setPa
 addEventListener('blur', () => { if (screen === 'play') setPaused(true); });
 
 // ---------- 규칙이 알려 준 일 → 소리와 효과 ----------
+const SHOT_PX = 560;
 const MON_LABEL = { ring10: '링 +10', shield: '보호막', invincible: '무적!', shoes: '빠른 신발!', life: '1UP!', magnet: '자석!' };
 function dust(x, y, n, sp = 1.4) { for (let i = 0; i < n; i++) fx.push({ x: x + (Math.random() - 0.5) * 8, y: y - 1, vx: (Math.random() - 0.5) * sp * 2, vy: -Math.random() * 0.6, t: 0, life: 14 + Math.random() * 10, color: '#e8dcc0' }); }
 function burst(x, y, color, n, sp = 2) { for (let i = 0; i < n; i++) { const a = Math.random() * 6.283, v = (0.4 + Math.random()) * sp; fx.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 0.6, t: 0, life: 22 + Math.random() * 14, color }); } }
@@ -292,7 +294,21 @@ function drawRings() {
   for (const s of G.scatter) { const sx = s.x - camX; ctx.strokeStyle = s.life < 60 && Math.floor(s.life / 4) % 2 ? 'rgba(255,210,58,.3)' : '#ffd23a'; ctx.beginPath(); ctx.ellipse(sx, s.y, 4, 6, 0, 0, 6.283); ctx.stroke(); }
 }
 function drawObjects() {
-  const L0 = G.level;
+  const L0 = G.level, TH0 = THEMES[L0.theme];
+  for (const lo of L0.lows) {                                                       // 낮은 굴: 천장 덩어리 밑에 낮은 틈. 입구에 아래 화살표(굴러!)
+    if (lo.x1 - camX < -4 || lo.x0 - camX > VW + 4) continue; const x0 = lo.x0 - camX, w = lo.x1 - lo.x0, gy = lo.gy, top = gy - L.LOW_TOP, bot = gy - L.LOW_H;
+    ctx.fillStyle = TH0.body[1]; ctx.fillRect(x0, top, w, bot - top); ctx.fillStyle = TH0.body[0]; for (let k = 0; k < w; k += 28) ctx.fillRect(x0 + k + 2, top + 2, 24, bot - top - 4);
+    ctx.fillStyle = TH0.top; ctx.fillRect(x0, bot - 4, w, 4); ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(x0, bot, w, 5);
+    ctx.fillStyle = TH0.top; ctx.fillRect(x0 - 5, top, 6, bot - top + 4); ctx.fillRect(x0 + w - 1, top, 6, bot - top + 4);
+    const bob = Math.sin(clock * 6) * 2; ctx.fillStyle = '#ffe27a'; ctx.strokeStyle = '#3a2a10'; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.font = '900 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.strokeText('▼', x0 - 22, gy - 52 + bob); ctx.fillText('▼', x0 - 22, gy - 52 + bob); ctx.font = '800 10px sans-serif'; ctx.strokeText('굴러!', x0 - 22, gy - 38); ctx.fillText('굴러!', x0 - 22, gy - 38); ctx.lineWidth = 2;
+  }
+  for (const c of L0.cannons) {                                                     // 대포: 곧 쏘면 불이 번쩍 + 낮게 날아오는 포탄
+    const sx = c.x - camX; if (sx < -SHOT_PX || sx > VW + 30) continue; const gy = c.gy, m = (((G.t - c.ph) % c.per) + c.per) % c.per, warn = c.per - m < 28;
+    ctx.fillStyle = '#3a3f55'; ctx.fillRect(sx - 14, gy - 22, 30, 22); ctx.fillStyle = '#585f7e'; ctx.fillRect(sx - 14, gy - 22, 30, 4); ctx.fillStyle = '#12151f'; ctx.beginPath(); ctx.arc(sx - 15, gy - 15, 6, 0, 6.283); ctx.fill();
+    ctx.fillStyle = '#8a90a8'; ctx.beginPath(); ctx.arc(sx + 6, gy - 5, 5, 0, 6.283); ctx.fill();
+    if (warn) { ctx.fillStyle = `rgba(255,${120 + Math.floor((c.per - m) * 4)},60,.85)`; ctx.beginPath(); ctx.arc(sx - 22, gy - 22, 4 + (28 - (c.per - m)) * 0.25, 0, 6.283); ctx.fill(); }
+    for (const sh of L.shotsOf(c, G.t)) { const hx = sh.x - camX; if (hx < -10 || hx > VW + 10) continue; ctx.fillStyle = 'rgba(255,180,90,.3)'; ctx.fillRect(hx + 4, gy - 24, 18, 4); ctx.fillStyle = '#1a1a24'; ctx.beginPath(); ctx.arc(hx, gy - 22, 5.5, 0, 6.283); ctx.fill(); ctx.fillStyle = '#ff8a3a'; ctx.beginPath(); ctx.arc(hx - 1.5, gy - 23.5, 1.8, 0, 6.283); ctx.fill(); }
+  }
   for (const b of L0.belts) {                                                       // 컨베이어: 움직이는 화살표 띠
     if (b.x1 - camX < 0 || b.x0 - camX > VW) continue;
     for (let wx = Math.max(Math.floor(camX), b.x0); wx < Math.min(camX + VW, b.x1); wx += 2) { const gy = L.groundY(L0, wx); if (!Number.isFinite(gy)) continue; ctx.fillStyle = '#d8a020'; ctx.fillRect(wx - camX, gy, 2, 5); }
@@ -464,6 +480,7 @@ let last = performance.now(), acc = 0;
 function tick() {
   const pg = G.p.ground, pvy = G.p.vy;
   const ev = L.step(G, readInput()) || G.events; handle(G.events);
+  for (const c of G.level.cannons) if (Math.abs(c.x - G.p.x) < 520 && (((G.t - c.ph) % c.per) + c.per) % c.per === 0) { sfx.shot(); burst(c.x - 24, c.gy - 22, '#ffb060', 6, 1.8); }
   const p = G.p;
   if (G.phase === 'play' && !p.dead) {                                                // 착지 먼지·찌그러짐, 달릴 때 먼지, 빠를 때 잔상
     const sp = Math.abs(p.ground ? p.gsp : p.vx);

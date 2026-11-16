@@ -15,7 +15,7 @@ const LOGIC_SP = (() => {
   const SPRING_V = 10, PAD_V = 10, HURT_VX = 2, HURT_VY = -4, INVULN = 120;
   const GROUND_REF = 150, Y_MIN = 78, Y_MAX = 168;            // 코스 땅 높이의 기준과 한계
   const PIT_LIMIT = 110;                                      // 구멍 폭 최대 (느리게 달려도 점프로 넘는다)
-  const RING_GRAB = 24, MAGNET_R = 130, MAGNET_TIME = 15 * 60, RING_R = 13, ENEMY_POINTS = 100, RING_POINTS = 10, START_LIVES = 3;
+  const LOW_H = 18, LOW_TOP = 140, SHOT_LIFE = 170, RING_GRAB = 24, MAGNET_R = 130, MAGNET_TIME = 15 * 60, RING_R = 13, ENEMY_POINTS = 100, RING_POINTS = 10, START_LIVES = 3;
   const SCATTER_MAX = 32, CHAIN_POINTS = [100, 200, 500, 1000], LIFE_RINGS = 100;      // 맞으면 링이 최대 32개 흩어짐 · 연속 처치 점수 · 링 100개마다 목숨 하나
   const DASH_BASE = 8, DASH_MAX_CHARGE = 8, SHOES_TIME = 20 * 60, INVINC_TIME = 15 * 60;   // 스핀 대시 · 신발·무적 시간
   const LOOP_R = 40, LOOP_W = 36, LOOP_MIN = 5;                                              // 루프: 반지름·폭, 이 속도 이상으로 들어가야 한 바퀴 돈다
@@ -25,14 +25,14 @@ const LOGIC_SP = (() => {
   // 코스 8개: 테마와 코스마다 고유한 구조(sig)가 있다. 골라 쓰는 sig 는 구간 생성 함수가 맡는다.
   //  valley 깊은 계곡 · tramp 스프링 줄 · iceslide 미끄러운 얼음 내리막 · lavaflame 용암 구멍에서 튀는 불꽃 · belt 컨베이어 · tunnel 가속 판 터널 · longgap 가속 판으로 넘는 긴 틈
   const ZONES = [
-    { name: '초원 언덕', theme: 'grass', len: 19200, pit: 0.10, enemy: 0.30, spike: 0.00, hill: 46, sig: null, sigP: 0, style: 'rollers', styles: ['rollers', 'plateaus', 'bumps'], roll: 0.55, extra: ['stones'] },
-    { name: '모래 협곡', theme: 'desert', len: 21000, pit: 0.14, enemy: 0.34, spike: 0.06, hill: 54, sig: 'valley', sigP: 0.20, style: 'dunes', styles: ['dunes', 'plateaus', 'longslope'], roll: 0.5, extra: ['stones', 'dropper'] },
-    { name: '정글 숲', theme: 'jungle', len: 22800, pit: 0.14, enemy: 0.38, spike: 0.06, hill: 56, sig: 'tramp', sigP: 0.18, style: 'bumps', styles: ['bumps', 'rollers', 'sawtooth'], roll: 0.6, extra: ['floatbridge', 'stones'] },
-    { name: '얼음 능선', theme: 'ice', len: 24600, pit: 0.16, enemy: 0.40, spike: 0.10, hill: 60, sig: 'iceslide', sigP: 0.20, style: 'longslope', styles: ['longslope', 'rollers', 'plateaus'], roll: 0.45, extra: ['stones', 'dropper'] },
-    { name: '용암 화산', theme: 'lava', len: 26400, pit: 0.18, enemy: 0.42, spike: 0.12, hill: 62, sig: 'lavaflame', sigP: 0.22, style: 'sawtooth', styles: ['sawtooth', 'dunes', 'islands'], roll: 0.55, extra: ['stones', 'dropper'] },
-    { name: '번개 공장', theme: 'factory', len: 28200, pit: 0.20, enemy: 0.46, spike: 0.14, hill: 64, sig: 'belt', sigP: 0.22, style: 'plateaus', styles: ['plateaus', 'sawtooth', 'highway'], roll: 0.5, extra: ['floatbridge', 'dropper'] },
-    { name: '네온 도시', theme: 'neon', len: 30000, pit: 0.22, enemy: 0.48, spike: 0.16, hill: 66, sig: 'tunnel', sigP: 0.22, style: 'highway', styles: ['highway', 'plateaus', 'bumps'], roll: 0.4, extra: ['floatbridge', 'stones'] },
-    { name: '구름 섬', theme: 'sky', len: 32400, pit: 0.24, enemy: 0.50, spike: 0.18, hill: 68, sig: 'longgap', sigP: 0.22, style: 'islands', styles: ['islands', 'rollers', 'highway'], roll: 0.5, extra: ['stones', 'floatbridge'] },
+    { name: '초원 언덕', theme: 'grass', len: 20400, pit: 0.10, enemy: 0.30, spike: 0.00, hill: 46, sig: null, sigP: 0, style: 'rollers', styles: ['rollers', 'plateaus', 'bumps'], roll: 0.55, extra: ['stones'] },
+    { name: '모래 협곡', theme: 'desert', len: 22400, pit: 0.14, enemy: 0.34, spike: 0.06, hill: 54, sig: 'valley', sigP: 0.20, style: 'dunes', styles: ['dunes', 'plateaus', 'longslope'], roll: 0.5, extra: ['stones', 'dropper'] },
+    { name: '정글 숲', theme: 'jungle', len: 24200, pit: 0.14, enemy: 0.38, spike: 0.06, hill: 56, sig: 'tramp', sigP: 0.18, style: 'bumps', styles: ['bumps', 'rollers', 'sawtooth'], roll: 0.6, extra: ['floatbridge', 'stones'] },
+    { name: '얼음 능선', theme: 'ice', len: 26000, pit: 0.16, enemy: 0.40, spike: 0.10, hill: 60, sig: 'iceslide', sigP: 0.20, style: 'longslope', styles: ['longslope', 'rollers', 'plateaus'], roll: 0.45, extra: ['stones', 'dropper'] },
+    { name: '용암 화산', theme: 'lava', len: 28000, pit: 0.18, enemy: 0.42, spike: 0.12, hill: 62, sig: 'lavaflame', sigP: 0.22, style: 'sawtooth', styles: ['sawtooth', 'dunes', 'islands'], roll: 0.55, extra: ['stones', 'dropper'] },
+    { name: '번개 공장', theme: 'factory', len: 29800, pit: 0.20, enemy: 0.46, spike: 0.14, hill: 64, sig: 'belt', sigP: 0.22, style: 'plateaus', styles: ['plateaus', 'sawtooth', 'highway'], roll: 0.5, extra: ['floatbridge', 'dropper'] },
+    { name: '네온 도시', theme: 'neon', len: 31800, pit: 0.22, enemy: 0.48, spike: 0.16, hill: 66, sig: 'tunnel', sigP: 0.22, style: 'highway', styles: ['highway', 'plateaus', 'bumps'], roll: 0.4, extra: ['floatbridge', 'stones'] },
+    { name: '구름 섬', theme: 'sky', len: 34400, pit: 0.24, enemy: 0.50, spike: 0.18, hill: 68, sig: 'longgap', sigP: 0.22, style: 'islands', styles: ['islands', 'rollers', 'highway'], roll: 0.5, extra: ['stones', 'floatbridge'] },
   ];
 
   const rng = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
@@ -44,14 +44,14 @@ const LOGIC_SP = (() => {
   function buildLevel(zone, seed) {
     const Z = ZONES[zone], rnd = rng(seed * 977 + zone * 31 + 7), len = Z.len;
     const H = new Float32Array(len + 1).fill(Infinity);
-    const L = { zone, name: Z.name, theme: Z.theme, sig: Z.sig, len, H, rings: [], enemies: [], springs: [], pads: [], spikes: [], checks: [], monitors: [], loops: [], ice: [], belts: [], longGaps: [], launches: [], seq: [], plats: [], highs: 0, pitN: 0, extras: 0, enemyN: 0, movers: 0, stonesN: 0, drops: 0, sigCount: 0, goalX: len - 260 };
+    const L = { zone, name: Z.name, theme: Z.theme, sig: Z.sig, len, H, rings: [], enemies: [], springs: [], pads: [], spikes: [], checks: [], monitors: [], loops: [], ice: [], belts: [], longGaps: [], launches: [], seq: [], plats: [], highs: 0, pitN: 0, extras: 0, enemyN: 0, movers: 0, stonesN: 0, drops: 0, sigCount: 0, lows: [], cannons: [], lowN: 0, cannonN: 0, goalX: len - 260 };
     let x = 0, y = GROUND_REF;
     const smooth = (x0, y0, x1, y1) => { for (let i = x0; i <= x1 && i <= len; i++) { const t = (i - x0) / Math.max(1, x1 - x0), s = t * t * (3 - 2 * t); H[i] = y0 + (y1 - y0) * s; } };
     const flat = (n) => { smooth(x, y, x + n, y); const a = x; x += n; return [a, x]; };
     // 구간 지문: 같은 코스 안에서는 종류+모양+크기가 똑같은 구간이 두 번 나오지 않는다.
     // pick(종류, {값이름: [후보…]}) 이 아직 안 쓴 조합을 골라 주고(없으면 null), mark(조합이름) 으로 "썼다"고 적는다. 같은 종류는 CAP 번까지만 나온다.
-    const used = new Set(), kindN = {}, sc = len / 19200, CAP = { breather: 99, enemy: 3 + Math.floor(zone * 0.8), pit: Math.round(4 * sc), sig: Math.round(4 * sc) };       // 긴 코스일수록 같은 종류가 조금 더 나올 수 있다
-    const capOf = (k) => k.startsWith('terrain') ? Math.round(2 * sc) : k.startsWith('sig') ? CAP.sig : CAP[k] || Math.round(3 * sc);
+    const used = new Set(), kindN = {}, sc = len / 19200, CAP = { tunnel: zone < 1 ? 0 : 2 + Math.floor(zone / 3), cannon: zone < 3 ? 0 : 1 + Math.floor((zone - 3) / 2), breather: 99, enemy: 3 + Math.floor(zone * 0.8), pit: Math.round(4 * sc), sig: Math.round(4 * sc) };       // 긴 코스일수록 같은 종류가 조금 더 나올 수 있다
+    const capOf = (k) => k.startsWith('terrain') ? Math.round(2 * sc) : k.startsWith('sig') ? CAP.sig : k in CAP ? CAP[k] : Math.round(3 * sc);
     const room = (k) => (kindN[k] || 0) < capOf(k);
     const pick = (kind, defs) => {
       if (!room(kind)) return null; const names = Object.keys(defs);
@@ -255,11 +255,27 @@ const LOGIC_SP = (() => {
         return true;
       },
     };
+    make.tunnel = () => {                                         // 낮은 굴: 천장 밑 틈이 낮아서 굴러야 지나간다 (서서 들어가면 부딪힌다). 굴 안에는 링
+      const o = pick('tunnel', { len: [140, 180, 220, 260], n: [1, 2], gap: [160, 220], pat: [0, 1, 2, 3] }); if (!o) return false; mark(o); guard();
+      flat(220); const cnt = o.n;
+      for (let m = 0; m < cnt; m++) {
+        if (m) flat(o.gap); const [a, b] = flat(o.len); L.lows.push({ x0: a, x1: b, gy: y });
+        for (let k = 0; k < Math.floor(o.len / 40); k++) L.rings.push({ x: a + 20 + k * 40, y: y - 8 });
+      }
+      flat(180); L.lowN++; return true;
+    };
+    make.cannon = () => {                                         // 대포: 끝에 대포가 있고 낮은 포탄이 날아온다 (구르거나 높이 뛰어 피한다)
+      const o = pick('cannon', { len: [440, 500, 560], per: [130, 150, 170], sp: [2.4, 2.8], pat: [0, 1, 2, 3] }); if (!o) return false; mark(o); guard();
+      const [a, b] = flat(o.len); L.cannons.push({ x: b - 40, gy: y, per: o.per, sp: o.sp, ph: Math.floor(rnd() * o.per) });
+      ringsLine(a, b - 120, 36, 22, o.pat); flat(200); L.cannonN++; return true;
+    };
     while (x < len - 1400) {
       const q = rnd();
       if (L.checks.length < 2 && x > len * nextCheck / 3) { const [a] = flat(160); L.checks.push({ x: a + 80 }); nextCheck++; continue; }
       if (Z.style && x > 700 && x < len - 1800 && x >= safeUntil && rnd() < Z.roll) { const t = pickTerrain(); if (t) terrain(t); }      // 땅 모양(언덕 등)을 먼저 깔고, 같은 차례에 보통 구간도 이어서 만든다
       const prev = L.seq[L.seq.length - 1] || '', pk = (k) => prev.startsWith(k);
+      if (x > 1200 && x < len - 1800 && !pk('tunnel') && room('tunnel') && (kindN.tunnel || 0) < Math.floor(x / len * capOf('tunnel') * 1.3 + 0.5) && make.tunnel()) { norm(); continue; }
+      if (x > 1600 && x < len - 1800 && !pk('cannon') && room('cannon') && (kindN.cannon || 0) < Math.floor(x / len * capOf('cannon') * 1.3 + 0.5) && make.cannon()) { norm(); continue; }
       if ((q < 0.10 || (kindN.loop || 0) < Math.floor(x / len * 3)) && x > 900 && !pk('loop')) {                                  // 루프: 앞에 달릴 평지, 루프, 뒤에 평지. 링이 원을 따라 놓인다
         const o = pick('loop', { n: [1, 1, 2], pre: [300, 340, 400, 460], post: [140, 180, 230], pat: [0, 1, 2, 3] });
         if (o) {
@@ -387,8 +403,10 @@ const LOGIC_SP = (() => {
     }
     const ang = p.plat ? 0 : angleAt(L, p.x), sn = Math.sin(ang), cs = Math.cos(ang);
     // 굴러가기(↓): 달리다 아래를 누르면 몸을 말아 굴러간다. 느려지면 풀린다
+    const inLow = L.lows.some((lo) => p.x > lo.x0 - 2 && p.x < lo.x1 + 2);                  // 낮은 굴 안에서는 구르던 몸이 일어서지 못한다(지나갈 때까지 계속 굴러 나간다)
     if (input.down && Math.abs(p.gsp) >= 1 && !p.roll) { p.roll = true; emit(st, { t: 'roll' }); }
-    if (p.roll && (Math.abs(p.gsp) < (p.dashRoll ? 1.5 : 0.5) || (!input.down && !p.dashRoll))) { p.roll = false; p.dashRoll = false; }   // ↓ 를 누르고 있는 동안만 구른다(떼면 속도는 그대로 달리기로). 스핀 대시로 나간 구르기는 느려질 때까지 계속
+    if (inLow && p.roll && Math.abs(p.gsp) < 2.5) p.gsp = (p.gsp < 0 ? -1 : 1) * 2.5;
+    if (p.roll && !inLow && (Math.abs(p.gsp) < (p.dashRoll ? 1.5 : 0.5) || (!input.down && !p.dashRoll))) { p.roll = false; p.dashRoll = false; }   // ↓ 를 누르고 있는 동안만 구른다(떼면 속도는 그대로 달리기로). 스핀 대시로 나간 구르기는 느려질 때까지 계속
     if (!p.roll) {
       if (dir) {
         if (p.gsp * dir < 0) { p.gsp += dir * DECK; if (p.gsp * dir > 0) p.gsp = dir * 0.5; }               // 반대로 꺾으면 브레이크
@@ -473,6 +491,12 @@ const LOGIC_SP = (() => {
       else hurt(st, e.x);
     }
   }
+  // 대포 포탄은 시간만으로 정해진다(저장할 상태가 없다): 발사 후 흐른 시간 a 에 따라 x = 대포 x - 16 - a * 속도
+  function shotsOf(c, t) {
+    const out = [], m = (((t - c.ph) % c.per) + c.per) % c.per;
+    for (let a = m; a < SHOT_LIFE; a += c.per) out.push({ x: c.x - 16 - a * c.sp, age: a });
+    return out;
+  }
   function objects(st) {
     const L = st.level, p = st.p, bx = pbox(p);
     // 링 줍기: 몸 가운데(p.y-12)에서 RING_GRAB 안이면 먹는다. 이번 걸음에 지나온 길(이전 자리→지금 자리)을 따라 재서 빠르게 달려도 안 놓친다.
@@ -490,6 +514,10 @@ const LOGIC_SP = (() => {
     for (const s of L.springs) if (Math.abs(s.x - p.x) < 12 && p.y > groundY(L, s.x) - 10 && p.y <= groundY(L, s.x) + 6 && (p.vy >= 0 || p.ground)) { p.vy = -SPRING_V; p.vx = clamp(p.ground ? p.gsp * Math.cos(angleAt(L, p.x)) : p.vx, -TOP, TOP); p.ground = false; p.jumping = false; p.roll = false; st.spring++; emit(st, { t: 'spring' }); }
     for (const d of L.pads) if (p.ground && Math.abs(d.x - p.x) < 14) { p.gsp = d.dir * PAD_V; p.roll = false; emit(st, { t: 'boost' }); }
     for (const k of L.spikes) if (Math.abs(k.x - p.x) < 9 && p.y > groundY(L, k.x) - 12) hurt(st, k.x);
+    // 낮은 굴: 천장 아래 틈이 LOW_H(18) 라서 서 있는 몸(24)은 부딪히고, 구르는 몸(16)은 지나간다
+    for (const lo of L.lows) if (p.x + 7 > lo.x0 && p.x - 7 < lo.x1 && !p.loop && overlap(pbox(p), { x: lo.x0, y: lo.gy - LOW_TOP, w: lo.x1 - lo.x0, h: LOW_TOP - LOW_H })) hurt(st, lo.x0 - 40);
+    // 대포: 일정한 간격으로 머리 높이(땅 위 18~26)로 낮게 날아오는 포탄. 구르거나 높이 뛰면 피한다
+    for (const c of L.cannons) if (Math.abs(c.x - p.x) < SHOT_LIFE * c.sp + 40) for (const sh of shotsOf(c, st.t)) if (overlap(pbox(p), { x: sh.x - 5, y: c.gy - 26, w: 10, h: 8 })) { hurt(st, sh.x); break; }
     for (let i = 0; i < L.monitors.length; i++) {                                   // 아이템 상자: 구르거나 뛰어서(또는 무적일 때) 닿으면 부서진다. 그냥 걸어서 지나가면 아무 일 없다
       const m = L.monitors[i]; if (st.mon.has(i) || !canKill(p)) continue;
       if (overlap(pbox(p), { x: m.x - 9, y: (m.y != null ? m.y : groundY(L, m.x)) - 22, w: 18, h: 22 })) {
@@ -537,6 +565,6 @@ const LOGIC_SP = (() => {
   const viewWidth = (availW, availH) => clamp(Math.round(VH * availW / Math.max(1, availH)), VW_MIN, VW_MAX);
 
   return { VW_MIN, VW_MAX, viewWidth, viewHeight, camShift, VH_MAX, CAM_TOP, CAM_BOTTOM, camTargetY, VW, VH, ACC, DEC, FRC, TOP, SLOPE, GRAV, JUMP, MAX_GSP, SPRING_V, PAD_V, INVULN, GROUND_REF, Y_MIN, Y_MAX, PIT_LIMIT, ZONES, TIME_PAR, START_LIVES,
-    BELT_V, SAFE_AFTER, SKINS, DROP_SKIN, CRUMBLE_T, CRUMBLE_GONE, platOff, LOOP_R, LOOP_W, LOOP_MIN, SCATTER_MAX, CHAIN_POINTS, LIFE_RINGS, DASH_BASE, SHOES_TIME, INVINC_TIME, RING_GRAB, MAGNET_R, MAGNET_TIME, rng, buildLevel, groundY, angleAt, newGame, spawn, step, isSpin, canKill, pbox };
+    BELT_V, SAFE_AFTER, SKINS, DROP_SKIN, CRUMBLE_T, CRUMBLE_GONE, platOff, LOOP_R, LOOP_W, LOOP_MIN, SCATTER_MAX, CHAIN_POINTS, LIFE_RINGS, DASH_BASE, SHOES_TIME, INVINC_TIME, LOW_H, LOW_TOP, SHOT_LIFE, shotsOf, RING_GRAB, MAGNET_R, MAGNET_TIME, rng, buildLevel, groundY, angleAt, newGame, spawn, step, isSpin, canKill, pbox };
 })();
 if (typeof module !== 'undefined') module.exports = LOGIC_SP;

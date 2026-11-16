@@ -468,3 +468,37 @@ test('early zones are gentler: no moving ground in zone one, moving bridges and 
   const widest = (z) => { let m = 0; for (let seed = 1; seed <= 10; seed++) { const v = L.buildLevel(z, seed); for (let i = 0; i <= v.len; i++) { if (Number.isFinite(v.H[i])) continue; let j = i; while (j <= v.len && !Number.isFinite(v.H[j])) j++; const special = v.longGaps.some((g) => g.x0 < j && g.x1 > i) || v.plats.some((q) => (q.crumble || q.amp) && q.x1 > i && q.x0 < j); if (!special) m = Math.max(m, j - i); i = j; } } return m; };
   assert.ok(widest(0) <= 80 && widest(7) > widest(0), 'pits get wider with the zone: ' + widest(0) + ' -> ' + widest(7));
 });
+
+test('a low tunnel hurts a standing runner but a rolling one passes, and the roll stays on inside', () => {
+  let found = null; for (let z = 1; z < 8 && !found; z++) for (let s = 1; s <= 6 && !found; s++) { const v = L.buildLevel(z, s); if (v.lows.length) found = { z, s, lo: v.lows[0] }; }
+  const run = (roll, hold) => {
+    const st = L.newGame({ zone: found.z, seed: found.s }); st.enemies = []; L.spawn(st, found.lo.x0 - 200); st.p.inv = 0; st.rings = 5; st.p.gsp = 6; let hurt = 0;
+    for (let i = 0; i < 160 && st.p.x < found.lo.x1 + 60; i++) { L.step(st, { right: true, down: roll && (hold || st.p.x < found.lo.x0 + 15) }); if (st.events.some((e) => e.t === 'hurt')) hurt++; st.events.length = 0; }
+    return { hurt, x: st.p.x };
+  };
+  assert.ok(run(false).hurt > 0, 'standing hits the ceiling');
+  const r = run(true, false); assert.strictEqual(r.hurt, 0, 'a roll started before the tunnel gets through even if down is released'); assert.ok(r.x >= found.lo.x1, 'came out the other side');
+  assert.strictEqual(run(true, true).hurt, 0);
+});
+
+test('a cannon shot flies low: it hurts a standing runner, and a rolling or high jumping one is missed', () => {
+  let f = null; for (let z = 3; z < 8 && !f; z++) for (let s = 1; s <= 8 && !f; s++) { const v = L.buildLevel(z, s); if (v.cannons.length) f = { z, s, c: v.cannons[0] }; }
+  assert.ok(f, 'cannons exist from zone four'); const c = f.c;
+  const trial = (mode) => {
+    const st = L.newGame({ zone: f.z, seed: f.s }); st.enemies = []; L.spawn(st, c.x - 330); st.p.inv = 0; st.rings = 5; st.p.gsp = 5; st.t = ((c.ph + c.per - 100) % c.per) + c.per * 10; let hurt = 0;
+    for (let i = 0; i < 160; i++) {
+      const near = L.shotsOf(c, st.t).some((q) => q.x - st.p.x > 0 && q.x - st.p.x < (mode === 'jump' ? 52 : 80));
+      const inp = { right: true, down: mode === 'roll' && (near || st.p.roll), jump: mode === 'jump' && near && st.p.ground, jumpHeld: mode === 'jump' && !st.p.ground };
+      L.step(st, inp); if (st.events.some((e) => e.t === 'hurt')) hurt++; st.events.length = 0;
+    }
+    return hurt;
+  };
+  assert.ok(trial('stand') > 0, 'standing is hit'); assert.strictEqual(trial('roll'), 0, 'rolling passes under'); assert.strictEqual(trial('jump'), 0, 'a jump passes over');
+});
+
+test('tunnels start in zone two and cannons in zone four, and both grow with the zone', () => {
+  const n = (z, key) => { let a = 0; for (let s = 1; s <= 10; s++) a += L.buildLevel(z, s)[key].length; return a / 10; };
+  assert.strictEqual(n(0, 'lows'), 0); assert.strictEqual(n(0, 'cannons'), 0); assert.ok(n(1, 'lows') >= 1); for (let z = 0; z < 3; z++) assert.strictEqual(n(z, 'cannons'), 0);
+  assert.ok(n(3, 'cannons') >= 0.9 && n(7, 'cannons') > n(3, 'cannons') && n(7, 'lows') > n(1, 'lows'));
+  for (let z = 1; z < 8; z++) for (let s = 1; s <= 6; s++) { const v = L.buildLevel(z, s); for (const lo of v.lows) for (let x = lo.x0 - 60; x <= lo.x1 + 60; x += 8) assert.ok(Math.abs(v.H[x] - lo.gy) < 0.01, 'flat ground under a tunnel'); }
+});

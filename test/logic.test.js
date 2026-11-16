@@ -309,3 +309,57 @@ test('tall portrait phones show more height, wide screens keep the normal height
   for (const vh of [200, 300, 380]) for (const y of [-300, -65, 0, 60, 150, 190, 260, 400]) { const sy = y - L.camTargetY(y, vh), s = L.camShift(vh); assert.ok(sy - 12 >= L.CAM_TOP + s - 0.01 && sy - 12 <= L.CAM_BOTTOM + s + 0.01 && sy < vh - 8, `inside the window vh=${vh} y=${y} -> ${sy}`); }
   assert.strictEqual(L.camTargetY(150), L.camTargetY(150, L.VH), 'default is the normal view');
 });
+
+function runToSpring(zone, seed, speed, n) {
+  const st = L.newGame({ zone, seed }); st.enemies = []; const sp = st.level.springs.find((s) => st.level.plats.some((p) => p.x0 > s.x + 100 && p.x0 < s.x + 400));
+  L.spawn(st, sp.x - 160); st.p.inv = 99999; st.p.gsp = speed; let landed = null, maxY = 1e9;
+  for (let i = 0; i < n; i++) { L.step(st, { right: true }); maxY = Math.min(maxY, st.p.y); if (st.p.plat && !landed) landed = { plat: st.p.plat, f: i }; }
+  return { st, sp, landed, maxY };
+}
+
+test('every course has a high road: a spring, then floating platforms with rings and an item box above a safe flat floor', () => {
+  for (let z = 0; z < 8; z++) for (const seed of [1, 4]) {
+    const v = L.buildLevel(z, seed); assert.ok(v.highs >= 2, `high roads in zone ${z}: ${v.highs}`); assert.strictEqual(v.plats.length, v.highs * 4);
+    for (const m of v.monitors) if (m.y != null) assert.ok(v.plats.some((p) => m.x > p.x0 && m.x < p.x1 && p.y === m.y), 'a platform item box sits on a platform');
+    for (const p of v.plats) { assert.ok(p.x1 - p.x0 >= 160 && p.y < 100, 'platforms are wide and well above the ground'); assert.ok(v.rings.some((r) => r.x > p.x0 && r.x < p.x1 && r.y < p.y), 'rings over a platform'); }
+    for (const p of v.plats) for (let x = p.x0; x < p.x1; x += 20) assert.ok(Number.isFinite(v.H[x]) && v.H[x] - p.y >= 100, 'flat safe ground far below a platform');
+  }
+});
+
+test('a spring bounce lands on the first platform at any normal running speed, and you can run along it', () => {
+  for (const speed of [3, 4.5, 6]) {
+    const { st, landed } = runToSpring(0, 1, speed, 260); assert.ok(landed, 'landed on a platform at speed ' + speed); assert.ok(st.p.y <= landed.plat.y + 0.01 || !st.p.plat, 'on top of it');
+  }
+  const { st } = runToSpring(2, 3, 6, 160); assert.ok(st.p.plat === null || st.p.ground, 'sanity');
+});
+
+test('platforms are one-way: you pass up through them, stand when coming down, and drop off the end', () => {
+  const st = L.newGame({ zone: 0, seed: 1 }); st.enemies = []; const pl = st.level.plats[0], mid = (pl.x0 + pl.x1) / 2, gy = st.level.H[Math.floor(mid)];
+  L.spawn(st, mid); st.p.inv = 99999; st.p.ground = false; st.p.y = gy - 10; st.p.vy = -9; st.p.vx = 0;
+  let passed = false, stood = false; for (let i = 0; i < 160 && !stood; i++) { L.step(st, {}); if (st.p.y < pl.y - 5) passed = true; if (st.p.plat === pl) stood = true; }
+  assert.ok(passed && stood, 'went up through the platform and landed on top of it'); assert.strictEqual(Math.round(st.p.y), Math.round(pl.y));
+  st.p.gsp = 6; let fell = false; for (let i = 0; i < 400 && !fell; i++) { L.step(st, { right: true }); if (st.p.plat === null && st.p.ground && st.p.x > pl.x1 + 20) fell = true; }
+  assert.ok(fell, 'ran off the end and landed back on the ground'); assert.ok(Math.abs(st.p.y - st.level.H[Math.floor(st.p.x)]) < 1);
+});
+
+test('each course has its own kinds of enemies instead of the same crab and bee', () => {
+  const seen = new Set();
+  for (let z = 0; z < 8; z++) {
+    const v = L.buildLevel(z, 2), skins = new Set(v.enemies.filter((e) => e.type !== 'flame').map((e) => e.skin)), theme = L.ZONES[z].theme; assert.ok(skins.size >= 1, 'enemies exist');
+    for (const s of skins) { assert.ok(L.SKINS[theme].includes(s), `${s} belongs to ${theme}`); seen.add(s); }
+    for (const e of v.enemies) if (e.type === 'crab' || e.type === 'bee') assert.ok(e.skin === L.SKINS[theme][e.type === 'bee' ? 1 : 0]);
+  }
+  assert.ok(seen.size >= 12, 'many different enemies in total: ' + seen.size);
+  const slow = L.newGame({ zone: 0, seed: 1 }).enemies.find((e) => e.skin === 'snail'); assert.ok(!slow || slow.spd < 0.5, 'a snail is slow');
+});
+
+test('in every course and seed, every high-road spring lands you on a platform at slow, normal and fast running speed', () => {
+  for (let z = 0; z < 8; z++) for (const seed of [1, 2, 3]) for (const speed of [2.5, 4, 6]) {
+    const st = L.newGame({ zone: z, seed }); st.enemies = []; const lv = st.level;
+    for (const sp of lv.springs.filter((s) => lv.plats.some((p) => p.x0 > s.x + 100 && p.x0 < s.x + 400))) {
+      L.spawn(st, sp.x - 160); st.p.inv = 99999; st.p.gsp = speed; let landed = false;
+      for (let i = 0; i < 300 && !landed; i++) { L.step(st, { right: true }); if (st.p.plat) landed = true; }
+      assert.ok(landed, `zone ${z} seed ${seed} speed ${speed} spring ${sp.x}`);
+    }
+  }
+});

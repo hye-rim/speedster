@@ -320,6 +320,7 @@ const LOGIC_SP = (() => {
   // ---------- 새 판 ----------
   function newGame(opts = {}) {
     const zone = clamp(opts.zone | 0, 0, ZONES.length - 1), level = buildLevel(zone, opts.seed == null ? 1 : opts.seed);
+    if (opts.tutorial) tutorialStage(level);
     const st = {
       zone, level, lives: opts.lives || START_LIVES, score: opts.score | 0, rings: 0, ringsTotal: 0, t: 0, events: [], phase: 'play', tutorial: !!opts.tutorial,
       checkX: 60, deaths: 0, kills: 0, spring: 0, maxSpeed: 0, chain: 0, nextLife: LIFE_RINGS, mon: new Set(), loopsRun: 0, monitorsBroken: 0,
@@ -329,6 +330,21 @@ const LOGIC_SP = (() => {
     if (st.tutorial) st.enemies.unshift({ id: 900, type: 'crab', skin: SKINS[level.theme][0], spd: SKIN_SPD[SKINS[level.theme][0]], x: 640, y: groundY(level, 640), home: 640, range: 40, dir: 1, alive: true, vy: 0 });      // 연습: 처음에 게 한 마리
     spawn(st, 60);
     return st;
+  }
+  // 연습 코스(1코스)에는 굴·대포가 없으니, 다른 것이 없는 평평한 구간을 찾아 낮은 굴 하나와 대포 하나를 놓는다(튜토리얼 전용).
+  function tutorialStage(L) {
+    const pts = [].concat(L.springs.map((e) => e.x), L.pads.map((e) => e.x), L.spikes.map((e) => e.x), L.checks.map((e) => e.x), L.monitors.map((e) => e.x), L.loops.map((e) => e.x - 200));
+    const ranges = [].concat(L.plats, L.ice, L.belts, L.longGaps).map((r) => [r.x0, r.x1]), loopR = L.loops.map((l) => [l.x - 200, l.x + LOOP_W + 400]);
+    const busy = (a, b) => pts.some((x) => x > a - 60 && x < b + 60) || ranges.concat(loopR).some((r) => r[1] > a - 60 && r[0] < b + 60);
+    const flatAt = (a, b) => { for (let i = a; i <= b; i++) if (!(Math.abs(L.H[i] - L.H[a]) < 0.01)) return false; return true; };
+    for (let a = 760; a < L.len - 1400; a += 40) {
+      const b = a + 640; if (!flatAt(a, b) || busy(a, b)) continue;
+      const x0 = a + 90, x1 = x0 + 160, gy = L.H[a];
+      L.rings = L.rings.filter((r) => !(r.x > a && r.x < b)); L.enemies = L.enemies.filter((e) => !(e.x > a - 60 && e.x < b + 60));      // 구간 안의 적은 치운다
+      L.lows.push({ x0, x1, gy }); for (let k = 0; k < 4; k++) L.rings.push({ x: x0 + 20 + k * 40, y: gy - 8 });
+      L.cannons.push({ x: b - 40, gy, per: 150, sp: 2.4, ph: 0 });
+      L.tutorialStage = { x0, x1, cannonX: b - 40 }; return;
+    }
   }
   function spawn(st, x) {
     const L = st.level;
@@ -514,6 +530,9 @@ const LOGIC_SP = (() => {
     for (const s of L.springs) if (Math.abs(s.x - p.x) < 12 && p.y > groundY(L, s.x) - 10 && p.y <= groundY(L, s.x) + 6 && (p.vy >= 0 || p.ground)) { p.vy = -SPRING_V; p.vx = clamp(p.ground ? p.gsp * Math.cos(angleAt(L, p.x)) : p.vx, -TOP, TOP); p.ground = false; p.jumping = false; p.roll = false; st.spring++; emit(st, { t: 'spring' }); }
     for (const d of L.pads) if (p.ground && Math.abs(d.x - p.x) < 14) { p.gsp = d.dir * PAD_V; p.roll = false; emit(st, { t: 'boost' }); }
     for (const k of L.spikes) if (Math.abs(k.x - p.x) < 9 && p.y > groundY(L, k.x) - 12) hurt(st, k.x);
+    // 튜토리얼 신호: 굴을 굴러서 끝까지 빠져나감 · 대포알이 내 앞을 지나감(맞지 않고)
+    for (let i = 0; i < L.lows.length; i++) { const lo = L.lows[i]; if (p.x > lo.x0 && p.x < lo.x1) st.lowIn = i; else if (st.lowIn === i) { st.lowIn = -1; if (p.x >= lo.x1 && p.roll) emit(st, { t: 'tunnel' }); } }
+    for (const c of L.cannons) if (p.inv <= 0 && Math.abs(c.x - p.x) < SHOT_LIFE * c.sp + 40) { const prev = shotsOf(c, st.t - 1), cur = shotsOf(c, st.t); for (const sh of cur) { const q = prev.find((u) => u.age === sh.age - 1); if (q && q.x >= p.x && sh.x < p.x) emit(st, { t: 'dodge' }); } }
     // 낮은 굴: 천장 아래 틈이 LOW_H(18) 라서 서 있는 몸(24)은 부딪히고, 구르는 몸(16)은 지나간다
     for (const lo of L.lows) if (p.x + 7 > lo.x0 && p.x - 7 < lo.x1 && !p.loop && overlap(pbox(p), { x: lo.x0, y: lo.gy - LOW_TOP, w: lo.x1 - lo.x0, h: LOW_TOP - LOW_H })) hurt(st, lo.x0 - 40);
     // 대포: 일정한 간격으로 머리 높이(땅 위 18~26)로 낮게 날아오는 포탄. 구르거나 높이 뛰면 피한다

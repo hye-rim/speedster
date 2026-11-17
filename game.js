@@ -353,7 +353,7 @@ function drawObjects() {
     ctx.fillStyle = '#2a2f48'; ctx.fillRect(sx - 9, gy - 22, 18, 22); ctx.fillStyle = '#9aa4c8'; ctx.fillRect(sx - 9, gy - 22, 18, 2); ctx.fillStyle = '#0a1020'; ctx.fillRect(sx - 7, gy - 20, 14, 14);
     const icon = { ring10: ['#ffd23a', '◯'], shield: ['#5ac0ff', '◍'], invincible: ['#ffffff', '★'], shoes: ['#ff6a4a', '»'], life: ['#ff8aa8', '♥'], magnet: ['#ff5a6a', 'U'], fire: ['#ff7a2a', 'F'], aqua: ['#3aa0ff', 'W'], thunder: ['#ffe03a', 'T'] }[m.type]; ctx.fillStyle = icon[0]; ctx.font = '900 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(icon[1], sx, gy - 13);
   }
-  for (const k of L0.spikes) { const sx = k.x - camX; if (sx < -12 || sx > VW + 12) continue; const gy = L.groundY(L0, k.x); ctx.fillStyle = '#d8dce8'; ctx.beginPath(); ctx.moveTo(sx - 8, gy); ctx.lineTo(sx, gy - 14); ctx.lineTo(sx + 8, gy); ctx.fill(); ctx.fillStyle = '#8a90a8'; ctx.beginPath(); ctx.moveTo(sx, gy - 14); ctx.lineTo(sx + 8, gy); ctx.lineTo(sx + 2, gy); ctx.fill(); }
+  for (const k of L0.spikes) { const sx = k.x - camX; if (sx < -12 || sx > VW + 12) continue; const gy = L.groundY(L0, k.x); ctx.fillStyle = '#d8dce8'; ctx.beginPath(); ctx.moveTo(sx - 8, gy); ctx.lineTo(sx, gy - 14); ctx.lineTo(sx + 8, gy); ctx.closePath(); ctx.fill(); ctx.strokeStyle = OUTLINE[L0.theme] || '#1a1030'; ctx.lineWidth = 1.6; ctx.stroke(); ctx.fillStyle = '#8a90a8'; ctx.beginPath(); ctx.moveTo(sx, gy - 14); ctx.lineTo(sx + 8, gy); ctx.lineTo(sx + 2, gy); ctx.fill(); }
   for (const s of L0.springs) { const sx = s.x - camX; if (sx < -14 || sx > VW + 14) continue; const gy = L.groundY(L0, s.x); ctx.fillStyle = '#e83a3a'; ctx.fillRect(sx - 9, gy - 5, 18, 5); ctx.strokeStyle = '#d8d8e8'; ctx.lineWidth = 3; ctx.beginPath(); for (let i = 0; i < 4; i++) { ctx.moveTo(sx - 6, gy - 6 - i * 3); ctx.lineTo(sx + 6, gy - 8 - i * 3); } ctx.stroke(); ctx.fillStyle = '#ffd23a'; ctx.fillRect(sx - 10, gy - 19, 20, 4); }
   for (const d of L0.pads) { const sx = d.x - camX; if (sx < -20 || sx > VW + 20) continue; const gy = L.groundY(L0, d.x); ctx.fillStyle = '#ffb02a'; ctx.fillRect(sx - 14, gy - 3, 28, 3); ctx.fillStyle = '#fff'; for (let i = 0; i < 3; i++) { const o = ((clock * 40 + i * 9) % 27) - 13; ctx.beginPath(); ctx.moveTo(sx + o, gy - 2); ctx.lineTo(sx + o + 4, gy - 1.5); ctx.lineTo(sx + o, gy - 0.5); ctx.fill(); } }
   for (const c of L0.checks) { const sx = c.x - camX; if (sx < -10 || sx > VW + 10) continue; const gy = L.groundY(L0, c.x), on = G.checkX >= c.x; ctx.fillStyle = '#d0d4e0'; ctx.fillRect(sx - 1.5, gy - 38, 3, 38); ctx.fillStyle = on ? '#ff5a5a' : '#4aa8ff'; ctx.beginPath(); ctx.arc(sx, gy - 40, 5, 0, 6.283); ctx.fill(); }
@@ -477,7 +477,16 @@ const SKIN_DRAW = {
   kite(x, y, d, t) { const f = Math.sin(t * 10) * 3; poly2(x - d * 11, y - 9 - f, x + d * 6, y - 8, x - d * 4, y - 3 + f, '#ffe8a0'); poly2(x - d * 6, y - 8, x + d * 9, y - 8, x, y - 3, '#ffd060'); ELL(x + d * 7, y - 8.4, 3, 2.6, '#fff4cc'); poly2(x + d * 9, y - 9, x + d * 14, y - 7.6, x + d * 9, y - 6.6, '#ff8a3a'); EYE(x + d * 7.6, y - 9, 1); poly2(x - d * 5, y - 6, x - d * 13, y - 3, x - d * 5, y - 4, '#e8b840'); },
 };
 function poly2(x0, y0, x1, y1, x2, y2, c) { ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x2, y2); ctx.closePath(); ctx.fill(); }
+// 적·위험물에 테두리를 둘러 배경과 구분한다: 밝은 배경에서는 어두운 테두리, 어두운 배경에서는 흰 테두리 (그림자를 네 방향으로 밀어 그려 윤곽선을 만든다)
+const OUTLINE = { grass: '#1a1030', desert: '#1a1030', jungle: '#10201a', ice: '#14143a', sky: '#1a1030', lava: '#fff4c8', factory: '#f0f6ff', neon: '#e8ffff', water: '#f0ffff' };
 function drawEnemy(e) {
+  const sx = e.x - camX; if (sx < -20 || sx > VW + 20) return;
+  const oc = OUTLINE[G.level.theme] || '#1a1030';
+  ctx.save(); ctx.shadowColor = oc; ctx.shadowBlur = 0;
+  for (const [ox, oy] of [[1.8, 0], [-1.8, 0], [0, 1.8], [0, -1.8], [1.3, 1.3], [-1.3, -1.3], [1.3, -1.3], [-1.3, 1.3]]) { ctx.shadowOffsetX = ox * K; ctx.shadowOffsetY = oy * K; drawEnemyRaw(e); }
+  ctx.shadowColor = 'transparent'; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; drawEnemyRaw(e); ctx.restore();
+}
+function drawEnemyRaw(e) {
   const sx = e.x - camX; if (sx < -20 || sx > VW + 20) return;
   if (e.type === 'flame') {                                                          // 용암에서 솟는 불꽃
     const wob = Math.sin(clock * 20 + e.id) * 1.5, y = e.y; ctx.fillStyle = '#ff5a10'; ctx.beginPath(); ctx.moveTo(sx - 7, y); ctx.quadraticCurveTo(sx - 8 + wob, y - 14, sx + wob, y - 26); ctx.quadraticCurveTo(sx + 8 + wob, y - 14, sx + 7, y); ctx.fill();

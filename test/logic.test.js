@@ -608,7 +608,10 @@ function fightBoss(z, seed, maxF = 7000) {                                   // 
     if (st.phase === 'dying') { L.step(st, {}); continue; }
     if (b && st.bossOn && !st.bossDown) {
       const dx = b.x - p.x; inp = { right: dx > 6, left: dx < -6, jumpHeld: !p.ground };
-      if (b.ph === 'low' || b.ph === 'dive') { inp.down = Math.abs(dx) < 150 && Math.abs(p.gsp) >= 1; if (!p.ground) inp.jumpHeld = false; } else if (p.ground && Math.abs(dx) < 70) inp.jump = true;
+      if (b.ph === 'low' || b.ph === 'dive' || b.ph === 'charge') { inp.down = Math.abs(dx) < 150 && Math.abs(p.gsp) >= 1; if (!p.ground) inp.jumpHeld = false; } else if (p.ground && Math.abs(dx) < 70) inp.jump = true;
+      const beam = st.bhaz.find((q) => q.kind === 'beam' && q.t > q.warn - 10 && q.t <= q.life);              // 광선: 낮은 건 뛰어 넘고 높은 건 몸을 낮춘다
+      if (beam) { if (beam.hi) { inp.jump = false; inp.jumpHeld = false; inp.down = true; } else if (p.ground) inp.jump = true; }
+      const pil = st.bhaz.find((q) => q.kind === 'pillar' && Math.abs(q.x - p.x) < 40 && q.t > q.warn - 8 && q.t <= q.life); if (pil && p.ground) inp.jump = true;       // 불기둥: 뛰어 넘는다
     }
     L.step(st, inp); for (const e of st.events) if (e.t === 'bosshit') hits++;
   }
@@ -616,16 +619,18 @@ function fightBoss(z, seed, maxF = 7000) {                                   // 
 }
 
 test('boss fight: rolling or jumping into the boss hurts it, it drops bombs and shots in later zones, and beating it opens the way to the goal', () => {
-  for (const z of [0, 2, 4, 8]) {
-    const r = fightBoss(z, 1); assert.strictEqual(r.st.phase, 'clear', 'zone ' + z + ' beaten, phase ' + r.st.phase); assert.ok(r.st.bossDown && r.hits === L.buildLevel(z, 1).boss.hp, 'one hit per hit point: ' + r.hits); assert.ok(r.f < 2400, 'a fight takes seconds not minutes: ' + r.f);
+  for (const z of [0, 1, 2, 3, 4, 5, 6, 7, 8]) {
+    const r = fightBoss(z, 1); assert.strictEqual(r.st.phase, 'clear', 'zone ' + z + ' beaten, phase ' + r.st.phase); assert.ok(r.st.bossDown && r.hits === L.buildLevel(z, 1).boss.hp, 'one hit per hit point: ' + r.hits); assert.ok(r.f < 3200, 'a fight takes seconds not minutes: ' + r.f);
   }
   const st = L.newGame({ zone: 4, seed: 1 }); const B = st.level.boss; L.spawn(st, B.x0 + 60); st.p.inv = 0; st.rings = 5; run(st, 10, {}); const b = st.boss; assert.ok(b, 'boss on');
   b.ph = 'low'; b.t = 0; b.x = st.p.x; b.y = B.gy - 24; b.inv = 0; L.step(st, {}); assert.ok(evs(st, 'hurt').length === 1 && st.boss.hp === B.hp, 'touching it while standing hurts you, not it');
   const j = L.newGame({ zone: 4, seed: 1 }); L.spawn(j, B.x0 + 60); j.p.inv = 0; run(j, 10, {}); const jb = j.boss; jb.ph = 'low'; jb.t = 0; jb.x = j.p.x; jb.y = B.gy - 30; j.p.ground = false; j.p.jumping = true; j.p.y = B.gy - 30; j.p.vy = 1; L.step(j, {});
   assert.strictEqual(j.boss.hp, B.hp - 1, 'a jumping spin hurts it'); assert.ok(j.boss.inv > 0 && j.p.vy < 0, 'it flashes and you bounce'); const hp = j.boss.hp; j.p.x = j.boss.x; j.p.y = j.boss.y + 8; j.p.jumping = true; j.p.ground = false; L.step(j, {}); assert.strictEqual(j.boss.hp, hp, 'no double hit while it flashes');
   const w = L.newGame({ zone: 4, seed: 1, lives: 5 }); L.spawn(w, B.x0 + 60); run(w, 10, {}); w.p.dead = false; w.boss.hp = 3; w.p.ground = false; w.p.y = 330; w.p.vy = 5; run(w, 80, {}); assert.ok(w.phase !== 'play' || !w.bossOn, 'falling out loses a life'); run(w, 200, {}); assert.ok(!w.bossOn && w.boss === null, 'the boss starts over after you die'); assert.strictEqual(w.checkX, B.check, 'you restart at the boss room');
-  let bombs = 0, shots = 0; const k = L.newGame({ zone: 6, seed: 1 }); L.spawn(k, k.level.boss.x0 + 60); k.p.inv = 99999; for (let i = 0; i < 900; i++) { L.step(k, {}); bombs = Math.max(bombs, k.bbombs.length); shots = Math.max(shots, k.bshots.length); } assert.ok(bombs > 0 && shots > 0, 'bombs and shots in later zones');
-  const e = L.newGame({ zone: 0, seed: 1 }); L.spawn(e, e.level.boss.x0 + 60); e.p.inv = 99999; for (let i = 0; i < 700; i++) { L.step(e, {}); assert.strictEqual(e.bbombs.length + e.bshots.length, 0, 'zone one boss only touches'); }
+  const seen = (z, pred, frames = 1200) => { const k = L.newGame({ zone: z, seed: 1 }); L.spawn(k, k.level.boss.x0 + 60); k.p.inv = 99999; for (let i = 0; i < frames; i++) { L.step(k, {}); if (pred(k)) return true; } return false; };
+  const want = { 1: (k) => k.boss.hidden || k.bhaz.some((q) => q.kind === 'pillar'), 2: (k) => k.bbombs.length >= 3, 3: (k) => k.boss.ph === 'charge', 4: (k) => k.bhaz.filter((q) => q.kind === 'pillar').length >= 2, 5: (k) => k.bhaz.some((q) => q.kind === 'beam'), 6: (k) => k.eshots.length >= 3, 7: (k) => k.bbombs.length >= 1, 8: (k) => k.bshots.length >= 1 };
+  for (const [z, pred] of Object.entries(want)) assert.ok(seen(Number(z), pred), `the ${L.BOSS_KIND[z]} boss in zone ${z} uses its own attack`);
+  const e = L.newGame({ zone: 0, seed: 1 }); L.spawn(e, e.level.boss.x0 + 60); e.p.inv = 99999; for (let i = 0; i < 700; i++) { L.step(e, {}); assert.strictEqual(e.bbombs.length + e.bshots.length + e.bhaz.length + e.eshots.length, 0, 'zone one boss only touches'); }
 });
 
 // ---------- 코르크스크루 · 튜브 · 부서지는 벽 · 바람 구멍 · 늪 ----------
@@ -856,4 +861,41 @@ test('the mix of sections stays different from course to course: the average ove
   const keys = [...names], vec = (m) => keys.map((k) => m[k] || 0), cos = (a, b) => { let d = 0, x = 0, y = 0; for (let i = 0; i < a.length; i++) { d += a[i] * b[i]; x += a[i] * a[i]; y += b[i] * b[i]; } return d / Math.sqrt(x * y || 1); };
   let sum = 0, n = 0, max = 0, who = ''; for (let a = 0; a < Z; a++) for (let b = a + 1; b < Z; b++) { const c = cos(vec(zv[a]), vec(zv[b])); sum += c; n++; if (c > max) { max = c; who = `${a + 1}-${b + 1}`; } }
   assert.ok(sum / n < 0.3, 'average overlap ' + (sum / n).toFixed(2)); assert.ok(max < 0.55, `most similar pair ${who}: ${max.toFixed(2)}`);
+});
+
+// ---------- 코스마다 다른 적의 행동 ----------
+const foe = (st, beh, x, fly = false) => { const e = { id: 3, type: fly ? 'bee' : 'crab', beh, skin: fly ? 'bird' : 'snail', spd: 0.5, x, y: fly ? 150 - 34 : 150, home: x, range: 40, base: 150, dir: -1, alive: true, vy: 0 }; st.enemies.push(e); return e; };
+
+test('enemy behaviours differ by course: every course pair is unique and the first course keeps the plain walkers', () => {
+  const B = L.ZONE_BEH; assert.strictEqual(B.length, L.ZONES.length); assert.deepStrictEqual(B[0], { g: 'walk', f: 'patrol' });
+  assert.strictEqual(new Set(B.map((q) => q.g + '/' + q.f)).size, B.length, 'each course has its own ground/flying pair');
+  for (let z = 0; z < L.ZONES.length; z++) { const v = L.buildLevel(z, 2); for (const e of v.enemies) if (e.type === 'crab' || e.type === 'bee') assert.strictEqual(e.beh, e.type === 'crab' ? B[z].g : B[z].f, 'enemies carry the course behaviour'); }
+});
+
+test('jumper hops toward mario in an arc, spitter lobs spit after a warning, slider warns and then charges, chaser follows a close mario', () => {
+  const jmp = world(); const j = foe(jmp, 'jump', 300); jmp.p.x = 450; jmp.p.inv = 99999; let maxUp = 0, moved = 0; for (let i = 0; i < 400; i++) { L.step(jmp, {}); maxUp = Math.max(maxUp, 150 - j.y); } moved = j.x - 300; assert.ok(maxUp > 20 && moved > 40, `hops toward him: up ${maxUp} moved ${moved}`);
+  const sp = world(); const s = foe(sp, 'spit', 300); sp.p.x = 480; sp.p.inv = 99999; let shots = 0, warned = false; for (let i = 0; i < 400; i++) { L.step(sp, {}); if (s.warn > 0) warned = true; shots = Math.max(shots, sp.eshots.length); } assert.ok(warned && shots >= 1 && Math.abs(s.x - 300) < 1, 'warns, then spits, and stays put');
+  const sl = world(); const d = foe(sl, 'slide', 300); sl.p.x = 440; sl.p.inv = 99999; let wd = false, dash = false; const x0 = d.x; for (let i = 0; i < 300; i++) { L.step(sl, {}); if (d.sl === 1) wd = true; if (d.sl === 2) dash = true; } assert.ok(wd && dash && Math.abs(d.x - x0) > 60, 'warns then charges');
+  const ch = world(); const c = foe(ch, 'chase', 300); ch.p.x = 480; ch.p.inv = 99999; run(ch, 100, {}); assert.ok(c.x > 380, 'follows: ' + c.x); const far = world(); const c2 = foe(far, 'chase', 300); far.p.x = 900; far.p.inv = 99999; run(far, 100, {}); assert.ok(Math.abs(c2.x - 300) < 60, 'ignores a far mario');
+});
+
+test('diver swoops at a mario below it and goes back up, bomber drops bombs that fall and vanish on the ground, shooter aims shards at mario', () => {
+  const dv = world(); const d = foe(dv, 'dive', 400, true); dv.p.x = 440; dv.p.inv = 99999; let low = 0, high = 999; for (let i = 0; i < 400; i++) { L.step(dv, {}); low = Math.max(low, d.y); high = Math.min(high, d.y); } assert.ok(low > 135 && high < 125, `dives low ${low} and rises ${high}`);
+  const bm = world(); const b = foe(bm, 'bomb', 400, true); bm.p.x = 430; bm.p.inv = 99999; let bombs = 0, gone = false; for (let i = 0; i < 300; i++) { L.step(bm, {}); bombs = Math.max(bombs, bm.eshots.filter((q) => q.kind === 'bomb').length); if (bm.events.some((e) => e.t === 'eboom')) gone = true; } assert.ok(bombs >= 1 && gone, 'drops bombs that burst on the ground');
+  const sh = world(); const f = foe(sh, 'shoot', 420, true); sh.p.x = 300; sh.p.inv = 99999; let shard = null; for (let i = 0; i < 300 && !shard; i++) { L.step(sh, {}); shard = sh.eshots.find((q) => q.kind === 'shard'); } assert.ok(shard && shard.vx < 0, 'shoots toward mario'); const hit = world(); hit.rings = 5; hit.p.x = 300; hit.eshots.push({ x: 300, y: 138, vx: 0, vy: 0, g: 0, kind: 'shard', life: 50 }); L.step(hit, {}); assert.ok(hit.events.some((e) => e.t === 'hurt'), 'a shot that touches him hurts');
+  const safe = world(); safe.rings = 5; safe.p.x = 300; safe.p.gsp = 0; safe.p.roll = true; safe.eshots.push({ x: 330, y: 120, vx: -2, vy: 0, g: 0, kind: 'shard', life: 50 }); run(safe, 30, {}); assert.ok(!safe.events.some((e) => e.t === 'hurt') && safe.rings === 5, 'a high shot passes over a low mario');
+  const far = world(); foe(far, 'shoot', 420, true); far.p.x = 3000; far.p.inv = 99999; run(far, 300, {}); assert.strictEqual(far.eshots.length, 0, 'nothing shoots from far away');
+});
+
+// ---------- 슈퍼 변신 (에메랄드 7개) ----------
+test('super form: seven emeralds and fifty rings let him transform in the air, he is faster and unhurtable, and the rings drain away', () => {
+  const mk = (em, rings) => { const st = world(); st.emeralds = em; st.rings = rings; return st; };
+  const press = (st) => { L.step(st, { jump: true, jumpHeld: true }); run(st, 8, { jumpHeld: true }); L.step(st, { jump: true, jumpHeld: true }); };
+  const ok = mk(7, 60); press(ok); assert.ok(ok.p.super && ok.events.some((e) => e.t === 'super') || ok.p.super, 'transforms with enough emeralds and rings');
+  for (const [em, r] of [[6, 99], [7, 49]]) { const st = mk(em, r); press(st); assert.ok(!st.p.super, `not with ${em} emeralds and ${r} rings`); }
+  const dry = mk(7, 60); dry.p.super = true; const norm = world(); run(dry, 200, { right: true }); run(norm, 200, { right: true }); assert.ok(dry.p.gsp > norm.p.gsp * 1.3, `faster: ${dry.p.gsp} vs ${norm.p.gsp}`);
+  const hit = mk(7, 60); hit.p.super = true; hit.level.spikes = [{ x: 100 }]; hit.p.x = 100; run(hit, 10, {}); assert.ok(hit.rings >= 59 && hit.phase === 'play', 'spikes do not hurt a super squirrel'); const foe2 = mk(7, 60); foe2.p.super = true; foe2.enemies.push({ id: 1, type: 'crab', x: 100, y: 150, home: 100, range: 0, base: 150, dir: 1, alive: true, vy: 0, skin: 'snail', spd: 0 }); run(foe2, 6, {}); assert.ok(foe2.kills >= 1, 'he knocks enemies out by touching');
+  const dr = mk(7, 3); dr.p.super = true; let ended = false; for (let i = 0; i < 400 && !ended; i++) { L.step(dr, {}); if (dr.events.some((e) => e.t === 'superend')) ended = true; } assert.ok(ended && !dr.p.super && dr.rings === 0, 'it ends when the rings run out');
+  const sea = world(); sea.level.waterY = 112; sea.p.super = true; sea.rings = 999; run(sea, L.AIR_MAX + 60, {}); assert.strictEqual(sea.phase, 'play', 'a super squirrel does not drown');
+  const keep = L.newGame({ zone: 1, seed: 1, emeralds: 4 }); assert.strictEqual(keep.emeralds, 4, 'emeralds carry from course to course');
 });

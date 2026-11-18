@@ -22,6 +22,7 @@ const LOGIC_SP = (() => {
   const TIME_PAR = [110, 122, 134, 146, 158, 170, 182, 200, 210];        // 이 시간(초) 안에 끝내면 시간 보너스
   const SAFE_AFTER = 580;                                        // 스프링·점프대·긴 틈 뒤로 이만큼은 위험물을 안 둔다
   const CORK_MIN = 4.5, CORK_H = 26, TUBE_MIN = 2.5, TUBE_V = 7.5, WALL_MIN = 2.5, FAN_LIFT = 0.8, FAN_UP = 4.2, MUD_DRAG = 0.985;   // 코르크스크루 최소 속도·높이 · 튜브 최소·이동 속도 · 부서지는 벽 최소 속도 · 바람 구멍 · 늪
+  const SUPER_NEED = 7, SUPER_RINGS = 50, SUPER_K = 1.5;               // 에메랄드 7개와 링 50개가 있으면 공중에서 점프를 한 번 더 눌러 슈퍼로 변신(링이 1초에 하나씩 줄고 0이 되면 풀린다)
   const GATE_OPEN = 420;                                          // 스위치를 밟으면 문이 열려 있는 프레임(7초)
   const ZIP_V = 5.5, FLIP_COOL = 30, SPECIAL_TIME = 40 * 60, SPECIAL_NEED = 100, SPECIAL_LEN = 7200;       // 도르래 속도 · 플리퍼 재사용 대기 · 특별 스테이지 시간·필요한 링·길이
   const WATER_Y = 112, AIR_MAX = 20 * 60;                        // 수중 코스: 수면 높이 · 숨을 쉬지 않고 버티는 시간(프레임). 마지막 5초는 숫자를 센다
@@ -53,6 +54,11 @@ const LOGIC_SP = (() => {
     { kinds: ['fan', 'seesaw', 'spring', 'basin'], count: [2, 2], pal: ['fan', 'zip', 'lift', 'seesaw', 'swing'] }, // 구름 섬: 바람과 공중
     { kinds: ['channel'], count: [1, 2], pal: ['current', 'mud', 'tube', 'crusher', 'seesaw'] },        // 수중: 위로 쌓지 않고 장애물 사이 헤엄
   ];
+  // 코스마다 적의 행동이 다르다(모양만 바뀌는 게 아니라): 땅 적 walk 걷기 · jump 뛰어 쫓기 · spit 포물선으로 뱉기 · slide 경고 뒤 돌진 · chase 따라오기 / 날아다니는 적 patrol 오가기 · dive 급강하 · bomb 폭탄 떨어뜨리기 · shoot 조준 사격
+  // 코스마다 다른 보스의 공격: basic 내려찍기만 · burrow 땅속에서 솟아오름 · rain 폭탄 비 · charge 돌진 · flame 불기둥 · laser 높이 다른 광선 · blink 순간이동하며 부채꼴 사격 · wind 바람으로 밀기 · torpedo 빠른 낮은 어뢰
+  const hashN = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };       // 결정적인 가짜 난수(보스 순간이동 자리)
+  const BOSS_KIND = ['basic', 'burrow', 'rain', 'charge', 'flame', 'laser', 'blink', 'wind', 'torpedo'];
+  const ZONE_BEH = [{ g: 'walk', f: 'patrol' }, { g: 'spit', f: 'dive' }, { g: 'jump', f: 'bomb' }, { g: 'slide', f: 'shoot' }, { g: 'chase', f: 'dive' }, { g: 'spit', f: 'bomb' }, { g: 'chase', f: 'shoot' }, { g: 'jump', f: 'dive' }, { g: 'slide', f: 'bomb' }];
   const rng = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const emit = (st, e) => { st.events.push(e); };
@@ -265,7 +271,7 @@ const LOGIC_SP = (() => {
       const defs = [{ v: [0], len: [300, 340, 380, 420], n: zone === 0 ? [2] : [2, 3], fl: [-1, 0, 1], pat: [0, 1, 2, 3] }, { v: [1], at: [200, 230, 260], k: [3, 4], pat: [0, 1, 2, 3] }, { v: [2], len: [380, 430, 480], n: [3, 4], pat: [0, 1, 2, 3] }, { v: [3], len: [440, 480, 520], f0: [0, 1], pat: [0, 1, 2, 3] }];
       for (const v of pats) { o = pick('enemy', defs[v]); if (o) break; }
       if (!o) return false; mark(o); guard(); L.enemyN++; lastEnemyPat = o.v;
-      const put = (ex, fly) => L.enemies.push({ type: fly ? 'bee' : 'crab', skin: SKINS[Z.theme][fly ? 1 : 0], x: ex, y: fly ? H[Math.floor(ex)] - 34 : H[Math.floor(ex)], home: ex, range: 60 });
+      const put = (ex, fly) => L.enemies.push({ type: fly ? 'bee' : 'crab', beh: fly ? ZONE_BEH[zone].f : ZONE_BEH[zone].g, skin: SKINS[Z.theme][fly ? 1 : 0], x: ex, y: fly ? H[Math.floor(ex)] - 34 : H[Math.floor(ex)], home: ex, range: 60 });
       if (o.v === 0) { const [a, b] = flat(o.len); ringsLine(a, b, 28, 22, o.pat); for (let k = 0; k < o.n; k++) put(a + 70 + k * ((b - a - 140) / Math.max(1, o.n - 1)), o.fl === 0 ? k === 0 : o.fl === 1 ? k === o.n - 1 : false); }
       else if (o.v === 1) { const [a, b] = flat(420); ringsLine(a, b, 32, 30, o.pat); put(a + 70, false); for (let k = 0; k < o.k; k++) L.spikes.push({ x: a + o.at + k * 16 }); put(a + 360, false); }
       else if (o.v === 2) { const [a, b] = flat(o.len); ringsLine(a, b, 28, 22, o.pat); for (let k = 0; k < o.n; k++) put(a + 70 + k * ((b - a - 140) / (o.n - 1)), true); }
@@ -534,9 +540,10 @@ const LOGIC_SP = (() => {
     const st = {
       zone, level, lives: opts.lives || START_LIVES, score: opts.score | 0, rings: 0, ringsTotal: 0, t: 0, events: [], phase: 'play', tutorial: !!opts.tutorial,
       checkX: 60, deaths: 0, kills: 0, spring: 0, maxSpeed: 0, chain: 0, nextLife: LIFE_RINGS, mon: new Set(), loopsRun: 0, monitorsBroken: 0,
-      enemies: [], clearT: 0, dyingT: 0, scatter: [], got: new Set(), cr: {}, gone: {}, mag: {}, bub: {}, bump: {}, broke: {}, gate: {}, ss: {}, flip: {}, emeralds: 0, giantTaken: false, sp: null, boss: null, bossOn: false, bossDown: false, bbombs: [], bshots: [], noBoss: opts.boss === false || !!opts.tutorial,
+      enemies: [], clearT: 0, dyingT: 0, scatter: [], got: new Set(), cr: {}, gone: {}, mag: {}, bub: {}, bump: {}, broke: {}, gate: {}, ss: {}, flip: {}, emeralds: Math.max(0, opts.emeralds | 0), giantTaken: false, sp: null, boss: null, bossOn: false, bossDown: false, bbombs: [], bshots: [], bhaz: [], noBoss: opts.boss === false || !!opts.tutorial,
     };
-    st.enemies = level.enemies.map((e, i) => ({ id: i, type: e.type, skin: e.skin, spd: SKIN_SPD[e.skin], x: e.x, y: e.y, home: e.home, range: e.range, base: e.base, dir: i % 2 ? 1 : -1, alive: true, vy: 0 }));
+    st.enemies = level.enemies.map((e, i) => ({ id: i, type: e.type, skin: e.skin, spd: SKIN_SPD[e.skin], x: e.x, y: e.y, home: e.home, range: e.range, base: e.base, beh: e.beh, dir: i % 2 ? 1 : -1, alive: true, vy: 0 }));
+    st.eshots = [];
     if (st.tutorial) st.enemies.unshift({ id: 900, type: 'crab', skin: SKINS[level.theme][0], spd: SKIN_SPD[SKINS[level.theme][0]], x: 640, y: groundY(level, 640), home: 640, range: 40, dir: 1, alive: true, vy: 0 });      // 연습: 처음에 게 한 마리
     spawn(st, 60);
     return st;
@@ -558,14 +565,14 @@ const LOGIC_SP = (() => {
   }
   function spawn(st, x) {
     const L = st.level;
-    st.p = { x, y: groundY(L, x), vx: 0, vy: 0, gsp: 0, ground: true, spin: false, roll: false, face: 1, inv: 60, dead: false, jumping: false, jumpHeld: false, hurt: 0, moved: false, crouch: false, charge: 0, dashRoll: false, shield: false, invinc: 0, shoes: 0, magnet: 0, lx: x, ly: groundY(L, x), loop: null, plat: null, air: AIR_MAX, shType: null, shUsed: false, bounce: false, fireT: 0 };
-    if (!st.bossDown) { st.bossOn = false; st.boss = null; st.bbombs = []; st.bshots = []; }      // 죽어서 다시 시작하면 보스는 처음부터
+    st.p = { x, y: groundY(L, x), vx: 0, vy: 0, gsp: 0, ground: true, spin: false, roll: false, face: 1, inv: 60, dead: false, jumping: false, jumpHeld: false, hurt: 0, moved: false, crouch: false, charge: 0, dashRoll: false, shield: false, invinc: 0, shoes: 0, magnet: 0, lx: x, ly: groundY(L, x), loop: null, plat: null, super: false, superT: 60, air: AIR_MAX, shType: null, shUsed: false, bounce: false, fireT: 0 };
+    if (!st.bossDown) { st.bossOn = false; st.boss = null; st.bbombs = []; st.bshots = []; st.bhaz = []; }      // 죽어서 다시 시작하면 보스는 처음부터
   }
 
   const inWater = (L, p) => L.waterY != null && p.y > L.waterY + 2;                // 발이 수면 아래: 움직임이 느려지고 중력이 약해진다
   const FIRE = new Set(['lavablob', 'ember', 'meteor']), ELEC = new Set(['drone', 'ufo', 'gearbot', 'spiderbot']);       // 불·번개 방패가 막아 주는 것
   const isSpin = (p) => p.roll || (!p.ground && p.jumping);
-  const canKill = (p) => isSpin(p) || p.invinc > 0 || !!p.loop;                  // 무적이거나 루프를 도는 중에는 닿기만 해도 적을 부순다
+  const canKill = (p) => isSpin(p) || p.invinc > 0 || !!p.loop || !!p.super;                  // 무적이거나 루프를 도는 중에는 닿기만 해도 적을 부순다
 
   // 링을 n 개 얻는다: 점수는 줄 때만, 100개를 넘을 때마다 목숨 하나
   function addRings(st, n, silent, scattered) {
@@ -611,7 +618,9 @@ const LOGIC_SP = (() => {
     stepFans(st);
     stepScatter(st);
     stepEnemies(st);
+    stepEShots(st);
     objects(st);
+    if (p.super && st.phase === 'play' && !st.sp) { if (--p.superT <= 0) { p.superT = 60; st.rings = Math.max(0, st.rings - 1); if (st.rings <= 0) { p.super = false; emit(st, { t: 'superend' }); } } }      // 슈퍼는 링이 1초에 하나씩 닳는다
     stepWater(st);
     stepBoss(st);
     if (st.sp) { stepSpecial(st); return; }
@@ -649,7 +658,7 @@ const LOGIC_SP = (() => {
     const L = st.level, p = st.p;
     if (p.loop) { stepLoop(st, input); return; }
     const onIce = L.ice.some((r) => p.x >= r.x0 && p.x <= r.x1);                                                        // 얼음 위: 가속·브레이크·마찰이 약해 미끄러진다
-    const wk = inWater(L, p) ? 0.5 : 1, k = (p.shoes > 0 ? 2 : 1) * wk, TOPK = TOP * k, ACCK = ACC * k * (onIce ? 0.3 : 1), DECK = DEC * k * (onIce ? 0.35 : 1), FRCK = FRC * k * (onIce ? 0.12 : 1);                     // 신발을 신으면 최고 속도·가속이 두 배
+    const wk = inWater(L, p) ? 0.5 : 1, k = (p.shoes > 0 ? 2 : 1) * wk * (p.super ? SUPER_K : 1), TOPK = TOP * k, ACCK = ACC * k * (onIce ? 0.3 : 1), DECK = DEC * k * (onIce ? 0.35 : 1), FRCK = FRC * k * (onIce ? 0.12 : 1);                     // 신발을 신으면 최고 속도·가속이 두 배
     // 스핀 대시: 서 있을 때 ↓ 로 웅크리고, 웅크린 채 점프 버튼을 누를 때마다 힘이 모인다. ↓ 를 놓으면 그 힘으로 굴러 나간다
     if (input.down && Math.abs(p.gsp) < 0.5 && !p.roll) {
       p.crouch = true; p.gsp = 0; if (dir) p.face = dir;
@@ -706,7 +715,8 @@ const LOGIC_SP = (() => {
   }
 
   function stepAir(st, input, dir) {
-    const L = st.level, p = st.p, TOPK = TOP * (p.shoes > 0 ? 2 : 1), wet = inWater(L, p);
+    const L = st.level, p = st.p, TOPK = TOP * (p.shoes > 0 ? 2 : 1) * (p.super ? SUPER_K : 1), wet = inWater(L, p);
+    if (input.jump && p.jumping && !p.super && st.emeralds >= SUPER_NEED && st.rings >= SUPER_RINGS && !st.sp) { p.super = true; p.superT = 60; p.inv = 0; emit(st, { t: 'super' }); return; }      // 슈퍼 변신
     // 방패 기술: 점프 중에 점프 버튼을 한 번 더 누르면 불(앞으로 대시) · 번개(한 번 더 뜀) · 물(아래로 내리꽂았다가 튀어 오름)
     if (input.jump && p.jumping && p.shield && !p.shUsed && (p.shType === 'fire' || p.shType === 'thunder' || p.shType === 'aqua')) {
       p.shUsed = true;
@@ -746,6 +756,53 @@ const LOGIC_SP = (() => {
     for (const s of st.scatter) { s.vy += 0.15; s.x += s.vx; s.y += s.vy; s.life--; const gy = groundY(st.level, s.x); if (s.y > gy && s.vy > 0) { s.y = gy; s.vy *= -0.6; } if (s.life < 240 && Math.hypot(s.x - p.x, s.y - (p.y - 12)) < RING_R && p.inv < 100) { s.life = 0; addRings(st, 1, false, true); } }
     st.scatter = st.scatter.filter((s) => s.life > 0);
   }
+  // 적 한 마리의 움직임: 코스의 행동(e.beh)에 따라 다르다
+  function moveEnemy(st, e) {
+    const L = st.level, p = st.p, dx = p.x - e.x, ad = Math.abs(dx), sgn = dx < 0 ? -1 : 1, b = e.beh || (e.type === 'crab' ? 'walk' : 'patrol'); if (e.cd === undefined) e.cd = 30 + (e.id * 17) % 60;
+    const patrolG = (k = 1) => { e.x += e.dir * (e.spd || 0.5) * k; if (Math.abs(e.x - e.home) > e.range) e.dir = -e.dir; e.y = groundY(L, e.x); };
+    const cruise = () => groundY(L, e.home) - 34 + Math.sin(st.t / 20 + e.id) * 8, patrolF = () => { e.x += e.dir * (e.spd || 0.8); if (Math.abs(e.x - e.home) > e.range * 1.4) e.dir = -e.dir; e.y = cruise(); };
+    const shoot = (kind, vx, vy, g) => { st.eshots.push({ x: e.x, y: e.y - 8, vx, vy, g, kind, life: 260 }); emit(st, { t: 'eshot', kind, x: e.x, y: e.y - 8 }); };
+    if (e.type === 'crab') {
+      if (b === 'jump') {                                          // 가만히 있다가 마리오 쪽으로 포물선을 그리며 뛴다
+        if (e.hv || e.jy < 0) { e.hv += 0.21; e.jy += e.hv; e.x += e.vxh; if (e.jy >= 0) { e.jy = 0; e.hv = 0; } } else { e.jy = 0; patrolG(0.5); e.cd--; if (e.cd <= 0 && ad < 260) { e.hv = -4.6; e.jy = -0.01; e.vxh = sgn * 1.4; e.cd = 90 + (e.id % 40); } }
+        e.y = groundY(L, e.x) + (e.jy || 0); return;
+      }
+      if (b === 'spit') {                                          // 제자리에서 몸을 부풀렸다가 포물선으로 침을 뱉는다
+        e.y = groundY(L, e.x); e.cd--; if (e.warn > 0) { e.warn--; if (e.warn === 0) shoot('spit', sgn * 1.9, -3.2, 0.09); } else if (e.cd <= 0 && ad < 300) { e.warn = 22; e.cd = 130 + (e.id % 30); } return;
+      }
+      if (b === 'slide') {                                         // 가까이 가면 몸을 떨며 경고하고 곧장 돌진한다
+        e.y = groundY(L, e.x);
+        if (!e.sl) { patrolG(0.3); e.cd--; if (e.cd <= 0 && ad < 220 && Math.abs(p.y - e.y) < 40) { e.sl = 1; e.t = 30; e.sd = sgn; } }
+        else if (e.sl === 1) { e.t--; if (e.t <= 0) { e.sl = 2; e.t = 55; } }
+        else { if (!Number.isFinite(groundY(L, e.x + e.sd * 8))) { e.sl = 0; e.cd = 120; return; } e.x += e.sd * 3.2; e.y = groundY(L, e.x); e.t--; if (e.t <= 0) { e.sl = 0; e.cd = 140; } }
+        return;
+      }
+      if (b === 'chase') {                                         // 가까이 있으면 마리오를 따라온다(느린 걸음보다 빠르고 달리기보다 느리다)
+        if (ad < 240 && Math.abs(p.y - e.y) < 60 && Number.isFinite(groundY(L, e.x + sgn * 10))) { e.x += sgn * 1.0; e.dir = sgn; e.y = groundY(L, e.x); } else patrolG();
+        return;
+      }
+      patrolG(); return;
+    }
+    if (b === 'dive') {                                            // 날아다니다가 아래로 가까이 오면 곧장 내리꽂는다
+      if (!e.dv) { patrolF(); e.cd--; if (e.cd <= 0 && ad < 130 && p.y > e.y) { e.dv = 1; e.t = 40; e.tx = p.x; e.ty = p.y - 12; } }
+      else if (e.dv === 1) { e.x += (e.tx - e.x) * 0.08; e.y += (e.ty - e.y) * 0.09; e.t--; if (e.t <= 0) { e.dv = 2; e.t = 70; } }
+      else { e.y += (cruise() - e.y) * 0.06; e.t--; if (e.t <= 0 || Math.abs(e.y - cruise()) < 2) { e.dv = 0; e.cd = 110; } }
+      return;
+    }
+    patrolF();
+    if (b === 'bomb') { e.cd--; if (e.cd <= 0 && ad < 150) { shoot('bomb', 0, 0.6, 0.1); e.cd = 100; } }                                      // 위를 지나가며 폭탄을 떨어뜨린다
+    else if (b === 'shoot') { e.cd--; if (e.cd <= 0 && ad < 280) { const tx = p.x - e.x, ty = (p.y - 12) - (e.y - 8), ln = Math.hypot(tx, ty) || 1; shoot('shard', tx / ln * 2.1, ty / ln * 2.1, 0); e.cd = 130; } }      // 마리오 쪽을 겨냥해 쏜다
+  }
+  // 적이 쏘고 떨어뜨린 것: 닿으면 다친다. 땅에 닿으면 사라진다
+  function stepEShots(st) {
+    const L = st.level, p = st.p; if (!st.eshots.length) return;
+    for (const s of st.eshots) {
+      s.vy += s.g || 0; s.x += s.vx; s.y += s.vy; s.life--;
+      if (!p.dead && overlap(pbox(p), { x: s.x - 4, y: s.y - 4, w: 8, h: 8 })) { hurt(st, s.x); s.life = 0; continue; }
+      const gy = groundY(L, s.x); if (Number.isFinite(gy) && s.y >= gy - 2) { if (s.kind === 'bomb') emit(st, { t: 'eboom', x: s.x, y: gy }); s.life = 0; }
+    }
+    st.eshots = st.eshots.filter((q) => q.life > 0 && Math.abs(q.x - p.x) < 600);
+  }
   function stepEnemies(st) {
     const L = st.level, p = st.p;
     for (const e of st.enemies) {
@@ -762,8 +819,7 @@ const LOGIC_SP = (() => {
         if (ph >= 53 && ph <= 92 && !p.dead && overlap(pbox(p), { x: e.x - 9, y: e.y - 20, w: 18, h: 20 })) hurt(st, e.x, FIRE.has(e.skin) ? 'fire' : undefined);
         continue;
       }
-      if (e.type === 'crab') { e.x += e.dir * (e.spd || 0.5); if (Math.abs(e.x - e.home) > e.range) e.dir = -e.dir; e.y = groundY(L, e.x); }
-      else { e.x += e.dir * (e.spd || 0.8); if (Math.abs(e.x - e.home) > e.range * 1.4) e.dir = -e.dir; e.y = groundY(L, e.home) - 34 + Math.sin(st.t / 20 + e.id) * 8; }
+      moveEnemy(st, e);
       const eb = { x: e.x - 8, y: e.y - 14, w: 16, h: 14 };
       if (p.dead || !overlap(pbox(p), eb)) continue;
       if (canKill(p)) { e.alive = false; st.kills++; const pts = CHAIN_POINTS[Math.min(st.chain, CHAIN_POINTS.length - 1)]; st.chain++; st.score += pts; emit(st, { t: 'kill', x: e.x, y: e.y, pts }); if (!p.ground) p.vy = p.vy > 0 ? -4 : p.vy + 1; }
@@ -830,7 +886,7 @@ const LOGIC_SP = (() => {
       if (Math.hypot(b.x - p.x, b.y - (p.y - 12)) < 20) { st.bub[i] = st.t + 600; p.air = AIR_MAX; emit(st, { t: 'air', x: b.x, y: b.y }); return; }
     }
     if (!(p.y - 22 > L.waterY) || p.loop) { p.air = AIR_MAX; return; }                       // 머리가 물 밖이면 숨을 쉰다
-    if (p.shield && p.shType === 'aqua') return;                                              // 물 방패: 물속에서도 숨이 안 줄어든다
+    if ((p.shield && p.shType === 'aqua') || p.super) return;                                 // 물 방패(슈퍼도): 물속에서도 숨이 안 줄어든다: 물속에서도 숨이 안 줄어든다
     p.air--;
     if (p.air === 900 || p.air === 600) emit(st, { t: 'airwarn' });
     if (p.air <= 300 && p.air > 0 && p.air % 60 === 0) emit(st, { t: 'drownnum', n: p.air / 60 });
@@ -850,25 +906,38 @@ const LOGIC_SP = (() => {
     if (!st.bossOn && !st.bossDown && p.x >= B.x0 + 30) { st.bossOn = true; st.boss = { x: B.x1 - 40, y: B.gy - 150, hp: B.hp, max: B.hp, ph: 'enter', t: 0, inv: 0, lockx: 0 }; emit(st, { t: 'boss', hp: B.hp }); }
     const b = st.boss; if (!st.bossOn || !b) return;
     b.t++; if (b.inv > 0) b.inv--;
-    const z = st.zone, hov = B.gy - 64;
+    const z = st.zone, hov = B.gy - 64, kind = BOSS_KIND[z] || 'basic'; let shake_ = false;
     if (b.ph === 'dead') { b.y += Math.min(3, b.t * 0.04); return; }
     const goto = (tx, sp) => { b.x += clamp(tx - b.x, -sp, sp); b.x = clamp(b.x, B.x0 + 24, B.x1 - 24); };
     if (b.ph === 'enter') { b.y = Math.min(hov, b.y + 3); goto(p.x, 1); if (b.y >= hov) { b.ph = 'hover'; b.t = 0; } }
     else if (b.ph === 'hover') {
       goto(p.x + Math.sin(st.t / 40) * 50, 1.4 + 0.12 * z); b.y = hov + Math.sin(st.t / 16) * 6;
-      if (z >= 2 && b.t === 70) st.bbombs.push({ x: b.x, y: b.y + 14, vy: 0, fuse: -1 });                     // 폭탄(3코스~): 떨어져서 땅에 닿고 잠시 뒤 터진다
-      if (z >= 4 && b.t === 40) st.bshots.push({ x: b.x, y: B.gy - 22, vx: (p.x < b.x ? -1 : 1) * 2.6, life: 220 });   // 낮은 포탄(5코스~)
+      const sgn = p.x < b.x ? -1 : 1;
+      if (kind === 'rain') { if (b.t === 40 || b.t === 80) for (const o of [-70, 0, 70]) st.bbombs.push({ x: clamp(p.x + o, B.x0 + 20, B.x1 - 20), y: b.y + 14, vy: 0, fuse: -1 }); }                      // 폭탄 비: 마리오 주위에 세 개씩
+      else if (kind === 'flame') { if (b.t >= 20 && b.t <= 80 && b.t % 20 === 0) { const k = (b.t - 20) / 20 + 1; st.bhaz.push({ kind: 'pillar', x: clamp(b.x + sgn * k * 46, B.x0 + 20, B.x1 - 20), y: B.gy, w: 24, h: 60, t: 0, warn: 16, life: 50 }); } }      // 마리오 쪽으로 번져 가는 불기둥
+      else if (kind === 'laser') { if (b.t === 30) { b.n = (b.n || 0) + 1; const hi = b.n % 2 === 0; st.bhaz.push({ kind: 'beam', x: B.x0, y: B.gy - (hi ? 44 : 10), w: B.x1 - B.x0, h: 10, t: 0, warn: 42, life: 78, hi }); } }      // 낮은 광선은 뛰어 넘고 높은 광선은 낮게 지난다
+      else if (kind === 'blink') { if (b.t > 0 && b.t % 70 === 0) { const r1 = hashN(st.t * 0.37 + 3), r2 = hashN(st.t * 0.91 + 7), nx = B.x0 + 40 + r1 * (B.x1 - B.x0 - 80); b.x = Math.abs(nx - p.x) < 60 ? clamp(nx + 120, B.x0 + 24, B.x1 - 24) : nx; b.y = hov - 20 + r2 * 30; const a0 = Math.atan2((p.y - 12) - b.y, p.x - b.x); for (const da of [-0.38, 0, 0.38]) st.eshots.push({ x: b.x, y: b.y, vx: Math.cos(a0 + da) * 2.2, vy: Math.sin(a0 + da) * 2.2, g: 0, kind: 'shard', life: 240 }); emit(st, { t: 'blink', x: b.x, y: b.y }); } }      // 순간이동하고 부채꼴로 쏜다
+      else if (kind === 'torpedo') { if (b.t === 36 || b.t === 84) st.bshots.push({ x: b.x, y: B.gy - 22, vx: sgn * 4.4, life: 160 }); }                                           // 빠른 낮은 어뢰
+      else if (kind === 'wind' && b.t === 70) st.bbombs.push({ x: b.x, y: b.y + 14, vy: 0, fuse: -1 });
       if (b.t >= 120 - Math.min(40, z * 5)) { b.ph = 'warn'; b.t = 0; }
-    } else if (b.ph === 'warn') { if (b.t >= 22) { b.ph = 'dive'; b.t = 0; b.lockx = p.x; } }
+    } else if (b.ph === 'warn') { if (b.t >= (kind === 'charge' ? 34 : 22)) { b.ph = kind === 'burrow' ? 'sink' : kind === 'charge' ? 'charge' : 'dive'; b.t = 0; b.lockx = p.x; b.cdir = p.x < b.x ? -1 : 1; } }
+    else if (b.ph === 'sink') {                                                // 땅속으로 들어가 마리오를 따라다니다가, 그 자리에서 솟아오른다(먼지로 미리 알려 준다)
+      b.hidden = true; b.y = Math.min(B.gy + 34, b.y + 4); if (b.t < 50) goto(p.x, 2.4); b.lockx = b.x;
+      if (b.t === 70) { b.hidden = false; b.y = B.gy - 24; b.ph = 'low'; b.t = 0; st.bhaz.push({ kind: 'pillar', x: b.x, y: B.gy, w: 30, h: 56, t: 0, warn: 0, life: 24 }); emit(st, { t: 'erupt', x: b.x, y: B.gy }); }
+    }
+    else if (b.ph === 'charge') {                                              // 벽까지 곧장 달려가 부딪히고 잠깐 어지러워한다
+      b.y = Math.min(B.gy - 24, b.y + 5); b.x += b.cdir * 5.2; if (b.x <= B.x0 + 24 || b.x >= B.x1 - 24) { b.x = clamp(b.x, B.x0 + 24, B.x1 - 24); b.ph = 'low'; b.t = -30; shake_ = true; emit(st, { t: 'bossslam', x: b.x, y: B.gy }); }
+    }
     else if (b.ph === 'dive') { goto(b.lockx, 3); b.y = Math.min(B.gy - 24, b.y + 4); if (b.y >= B.gy - 24) { b.ph = 'low'; b.t = 0; } }
     else if (b.ph === 'low') { goto(p.x, 1.1 + 0.1 * z); if (b.t >= 44) { b.ph = 'rise'; b.t = 0; } }
     else if (b.ph === 'rise') { b.y = Math.max(hov, b.y - 2.5); goto(p.x, 1); if (b.y <= hov) { b.ph = 'hover'; b.t = 0; } }
     // 부딪힘: 몸을 말고(또는 뛰어서) 닿으면 보스가 다치고, 그냥 닿으면 내가 다친다
-    if (!p.dead && b.ph !== 'enter' && overlap(pbox(p), { x: b.x - 24, y: b.y - 16, w: 48, h: 30 })) {
+    if (kind === 'wind' && b.ph !== 'enter') { const w = Math.sin(st.t / 110 * Math.PI) > 0 ? 1 : -1; p.x += w * 0.55; if (!p.ground) p.vx += w * 0.04; }      // 바람: 한 방향으로 불다가 바뀐다
+    if (!p.dead && !b.hidden && b.ph !== 'enter' && overlap(pbox(p), { x: b.x - 24, y: b.y - 16, w: 48, h: 30 })) {
       if (canKill(p)) {
         if (b.inv <= 0) {
           b.hp--; b.inv = 70; st.score += 100; emit(st, { t: 'bosshit', hp: b.hp, x: b.x, y: b.y });
-          if (b.hp <= 0) { b.ph = 'dead'; b.t = 0; st.bossDown = true; st.score += 1000; st.bbombs = []; st.bshots = []; emit(st, { t: 'bossdead', x: b.x, y: b.y }); }
+          if (b.hp <= 0) { b.ph = 'dead'; b.t = 0; st.bossDown = true; st.score += 1000; st.bbombs = []; st.bshots = []; st.bhaz = []; emit(st, { t: 'bossdead', x: b.x, y: b.y }); }
         }
         const sg = p.x < b.x ? -1 : 1;
         if (p.ground) { p.gsp = sg * Math.max(3, Math.abs(p.gsp) * 0.5); } else { p.vx = sg * 3; p.vy = p.vy > 0 ? -4.5 : 1.5; }
@@ -881,6 +950,13 @@ const LOGIC_SP = (() => {
     st.bbombs = st.bbombs.filter((q) => !q.done);
     for (const sh of st.bshots) { sh.x += sh.vx; sh.life--; if (!p.dead && overlap(pbox(p), { x: sh.x - 5, y: sh.y - 4, w: 10, h: 8 })) { hurt(st, sh.x); sh.life = 0; } }
     st.bshots = st.bshots.filter((q) => q.life > 0 && q.x > B.x0 - 40 && q.x < B.x1 + 40);
+    for (const hz of st.bhaz) {                                                // 불기둥·광선: 경고(warn) 뒤에 켜져서 life 까지 닿으면 다친다
+      hz.t++; if (hz.t <= hz.warn || hz.t > hz.life || p.dead) continue;
+      const box = hz.kind === 'pillar' ? { x: hz.x - hz.w / 2, y: hz.y - hz.h, w: hz.w, h: hz.h } : { x: hz.x, y: hz.y - hz.h / 2, w: hz.w, h: hz.h };
+      if (overlap(pbox(p), box)) hurt(st, hz.x + hz.w / 2, hz.kind === 'pillar' && kind === 'flame' ? 'fire' : undefined);
+    }
+    st.bhaz = st.bhaz.filter((q) => q.t <= q.life);
+    if (shake_) emit(st, { t: 'bossshake' });
   }
   function objects(st) {
     const L = st.level, p = st.p, bx = pbox(p);
@@ -930,7 +1006,7 @@ const LOGIC_SP = (() => {
   function hurt(st, fromX, src) {
     const p = st.p;
     if (p.inv > 0 || p.dead || st.phase !== 'play') return;
-    if (p.invinc > 0 || p.loop) return;
+    if (p.invinc > 0 || p.loop || p.super) return;
     if (st.sp) { st.rings = Math.max(0, st.rings - 5); p.inv = INVULN; p.vx = (p.x < fromX ? -1 : 1) * HURT_VX; p.vy = HURT_VY; p.ground = false; p.jumping = false; p.roll = false; emit(st, { t: 'hurt', rings: 0 }); return; }      // 특별 스테이지: 링 5개만 잃는다
     if (p.shield && ((src === 'fire' && p.shType === 'fire') || (src === 'elec' && p.shType === 'thunder'))) return;      // 불 방패는 불을, 번개 방패는 전기를 막는다(방패는 그대로)                                              // 무적이거나 루프를 도는 중에는 안 다친다
     if (p.shield) { p.shield = false; p.shType = null; p.bounce = false; p.inv = INVULN; p.vx = (p.x < fromX ? -1 : 1) * HURT_VX; p.vy = HURT_VY; p.ground = false; p.jumping = false; p.roll = false; p.dashRoll = false; emit(st, { t: 'shieldbreak' }); return; }   // 보호막은 한 번 막아 준다 (링은 그대로)
@@ -966,6 +1042,6 @@ const LOGIC_SP = (() => {
   const viewWidth = (availW, availH) => clamp(Math.round(VH * availW / Math.max(1, availH)), VW_MIN, VW_MAX);
 
   return { VW_MIN, VW_MAX, viewWidth, viewHeight, camShift, VH_MAX, CAM_TOP, CAM_BOTTOM, camTargetY, VW, VH, ACC, DEC, FRC, TOP, SLOPE, GRAV, JUMP, MAX_GSP, SPRING_V, PAD_V, INVULN, GROUND_REF, Y_MIN, Y_MAX, PIT_LIMIT, ZONES, TIME_PAR, START_LIVES,
-    BELT_V, SAFE_AFTER, SKINS, DROP_SKIN, CRUMBLE_T, CRUMBLE_GONE, platOff, LOOP_R, LOOP_W, LOOP_MIN, SCATTER_MAX, CHAIN_POINTS, LIFE_RINGS, DASH_BASE, SHOES_TIME, INVINC_TIME, LOW_H, LOW_TOP, SHOT_LIFE, shotsOf, ZONE_PROFILE, GATE_OPEN, WATER_Y, AIR_MAX, ZIP_V, SPECIAL_TIME, SPECIAL_NEED, SPECIAL_LEN, buildSpecial, CORK_MIN, CORK_H, TUBE_MIN, TUBE_V, WALL_MIN, MUD_DRAG, swingPos, crushY, inWater, RING_GRAB, MAGNET_R, MAGNET_TIME, rng, buildLevel, groundY, angleAt, newGame, spawn, step, isSpin, canKill, pbox };
+    BELT_V, SAFE_AFTER, SKINS, DROP_SKIN, CRUMBLE_T, CRUMBLE_GONE, platOff, LOOP_R, LOOP_W, LOOP_MIN, SCATTER_MAX, CHAIN_POINTS, LIFE_RINGS, DASH_BASE, SHOES_TIME, INVINC_TIME, LOW_H, LOW_TOP, SHOT_LIFE, shotsOf, ZONE_PROFILE, ZONE_BEH, BOSS_KIND, SUPER_NEED, SUPER_RINGS, SUPER_K, GATE_OPEN, WATER_Y, AIR_MAX, ZIP_V, SPECIAL_TIME, SPECIAL_NEED, SPECIAL_LEN, buildSpecial, CORK_MIN, CORK_H, TUBE_MIN, TUBE_V, WALL_MIN, MUD_DRAG, swingPos, crushY, inWater, RING_GRAB, MAGNET_R, MAGNET_TIME, rng, buildLevel, groundY, angleAt, newGame, spawn, step, isSpin, canKill, pbox };
 })();
 if (typeof module !== 'undefined') module.exports = LOGIC_SP;

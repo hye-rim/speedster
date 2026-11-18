@@ -3,7 +3,7 @@
 // 「그냥 달리기 / 구르기 / 크게 뛰기 / 낮게 뛰기」를 각각 100프레임쯤 미리 돌려 보고, 다치거나 죽지 않고 가장 멀리 가는 것을 고른다.
 // 사람이 길을 읽고 고르는 것과 같다. 코스에 건널 길이 있는지 확인하는 데 쓴다.
 const L = require('../logic.js');
-function clone(st) { return { ...st, p: { ...st.p }, enemies: st.enemies.map((e) => ({ ...e })), scatter: st.scatter.map((s) => ({ ...s })), got: new Set(st.got), cr: { ...st.cr }, gone: { ...st.gone }, bub: { ...st.bub }, bump: { ...st.bump }, gate: { ...st.gate }, ss: { ...st.ss }, flip: { ...st.flip }, broke: { ...st.broke }, boss: st.boss && { ...st.boss }, bbombs: st.bbombs.map((q) => ({ ...q })), bshots: st.bshots.map((q) => ({ ...q })), events: [] }; }
+function clone(st) { return { ...st, p: { ...st.p }, enemies: st.enemies.map((e) => ({ ...e })), scatter: st.scatter.map((s) => ({ ...s })), got: new Set(st.got), cr: { ...st.cr }, gone: { ...st.gone }, bub: { ...st.bub }, bump: { ...st.bump }, gate: { ...st.gate }, eshots: (st.eshots || []).map((e) => ({ ...e })), ss: { ...st.ss }, flip: { ...st.flip }, broke: { ...st.broke }, boss: st.boss && { ...st.boss }, bbombs: st.bbombs.map((q) => ({ ...q })), bshots: st.bshots.map((q) => ({ ...q })), events: [] }; }
 const PLANS = [
   { name: 'run', roll: 0, jump: false, hold: true, delay: 0 },
   { name: 'roll', roll: 50, jump: false, hold: true, delay: 0 },
@@ -27,17 +27,21 @@ function rollout(st, plan, frames) {
   return { dead: c.lives < lives0 || c.phase === 'dying' || c.phase === 'over', hurt, x: c.p.x, ground: c.p.ground };
 }
 function play(zone, seed, opts = {}) {
-  const st = L.newGame({ zone, seed, lives: opts.lives || 99, boss: !!opts.boss }); let f = 0, hurts = 0, plan = PLANS[0], planLeft = 0, waitJump = -1, wasAir = false; const bad = [];   // bad: 같은 자리에서 죽은 계획(다시 쓰지 않는다)
+  const st = L.newGame({ zone, seed, lives: opts.lives || 99, boss: !!opts.boss }); let sd = 0, f = 0, hurts = 0, plan = PLANS[0], planLeft = 0, waitJump = -1, wasAir = false; const bad = [];   // bad: 같은 자리에서 죽은 계획(다시 쓰지 않는다)
   const maxF = 60 * (opts.maxSec || 400), frames = opts.frames || 100; const snaps = [];
   while (st.phase !== 'clear' && st.phase !== 'over' && f < maxF) {
     f++;
     if (opts.onHurt) { snaps.push(clone(st)); if (snaps.length > 140) snaps.shift(); }
     const p = st.p; let inp = { right: true };
     if (p.ground && wasAir) { planLeft = 0; waitJump = -1; } wasAir = !p.ground;                    // 착지하면 계획을 새로 세운다(착지 직후 바로 앞에 구멍이 있을 수 있다)
+    // 벽에 막혀 서 있으면(공중에서 부딪혀 속도를 잃은 경우) 스핀 대시로 부순다: ↓ 로 웅크려 점프를 몇 번 누른 뒤 놓는다
+    const blocked = st.phase === 'play' && p.ground && Math.abs(p.gsp) < 0.6 && st.level.walls.some((q, i) => !st.broke[i] && q.x > p.x && q.x - p.x < 22);
+    if (blocked) { sd++; planLeft = 0; waitJump = -1; } else if (sd > 0 && Math.abs(p.gsp) > 2) sd = 0;
+    if (blocked) { inp = sd % 80 < 40 ? { right: true, down: true, jump: sd % 5 === 0 } : { right: true }; L.step(st, inp); continue; }
     if (st.phase === 'play' && p.ground) {
       const near = (arr, ahead) => arr.some((q) => q.x > p.x && q.x - p.x < ahead);
       const v = Math.max(3, Math.abs(p.gsp)); let pit = false; for (let d = 6; d <= v * 14; d += 6) if (!Number.isFinite(L.groundY(st.level, p.x + d))) { pit = true; break; }
-      const hazard = pit || near(st.level.lows.map((l) => ({ x: l.x0 })), v * 20) || near(st.level.cannons, v * 40) || near(st.level.swings.map((q) => ({ x: q.x - 110 })), v * 22) || near(st.level.walls.map((q, i) => (st.broke[i] ? null : { x: q.x + 30 })).filter(Boolean), v * 16 + 40) || near(st.level.crushers.map((q) => ({ x: q.x0 })), v * 22) || near(st.level.bumpers.map((q) => ({ x: q.x - 40 })), 0) || near(st.level.spikes, v * 14) || near(st.level.springs, v * 14) || st.enemies.some((e) => e.alive && e.x > p.x && e.x - p.x < v * 14);
+      const hazard = pit || near(st.level.lows.map((l) => ({ x: l.x0 })), v * 20) || near(st.level.cannons, v * 40) || near(st.level.swings.map((q) => ({ x: q.x - 110 })), v * 22) || near(st.level.walls.map((q, i) => (st.broke[i] ? null : { x: q.x + 30 })).filter(Boolean), v * 16 + 40) || near(st.level.crushers.map((q) => ({ x: q.x0 })), v * 22) || near(st.level.bumpers.map((q) => ({ x: q.x - 40 })), 0) || near(st.level.spikes, v * 14) || (st.eshots || []).some((s) => s.x > p.x - 20 && s.x - p.x < v * 18 && Math.abs(s.y - (p.y - 12)) < 70) || near(st.level.springs, v * 14) || st.enemies.some((e) => e.alive && e.x > p.x && e.x - p.x < v * 14);
       if (planLeft > 0) planLeft--;
       if (hazard && (planLeft <= 0 || (pit && plan.roll))) {                                  // 구르는 중에 구멍이 나타나면 다시 계획한다
         let best = null;

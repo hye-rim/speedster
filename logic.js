@@ -29,15 +29,15 @@ const LOGIC_SP = (() => {
   // 코스 9개(마지막은 물속): 테마와 코스마다 고유한 구조(sig)가 있다. 골라 쓰는 sig 는 구간 생성 함수가 맡는다.
   //  valley 깊은 계곡 · tramp 스프링 줄 · iceslide 미끄러운 얼음 내리막 · lavaflame 용암 구멍에서 튀는 불꽃 · belt 컨베이어 · tunnel 가속 판 터널 · longgap 가속 판으로 넘는 긴 틈
   const ZONES = [
-    { name: '초원 언덕', theme: 'grass', len: 24000, pit: 0.10, enemy: 0.30, spike: 0.00, hill: 46, sig: null, sigP: 0, style: 'rollers', styles: ['rollers', 'plateaus', 'bumps'], roll: 0.55, extra: ['stones'] },
-    { name: '모래 협곡', theme: 'desert', mud: true, len: 28500, pit: 0.14, enemy: 0.34, spike: 0.06, hill: 54, sig: 'valley', sigP: 0.20, style: 'dunes', styles: ['dunes', 'plateaus', 'longslope'], roll: 0.5, extra: ['stones', 'dropper'] },
-    { name: '정글 숲', theme: 'jungle', mud: true, len: 30800, pit: 0.14, enemy: 0.38, spike: 0.06, hill: 56, sig: 'tramp', sigP: 0.18, style: 'bumps', styles: ['bumps', 'rollers', 'sawtooth'], roll: 0.6, extra: ['floatbridge', 'stones'] },
-    { name: '얼음 능선', theme: 'ice', len: 33200, pit: 0.16, enemy: 0.40, spike: 0.10, hill: 60, sig: 'iceslide', sigP: 0.20, style: 'longslope', styles: ['longslope', 'rollers', 'plateaus'], roll: 0.45, extra: ['stones', 'dropper'] },
-    { name: '용암 화산', theme: 'lava', len: 34100, pit: 0.18, enemy: 0.42, spike: 0.12, hill: 62, sig: 'lavaflame', sigP: 0.22, style: 'sawtooth', styles: ['sawtooth', 'dunes', 'islands'], roll: 0.55, extra: ['stones', 'dropper'] },
-    { name: '번개 공장', theme: 'factory', len: 36400, pit: 0.20, enemy: 0.46, spike: 0.14, hill: 64, sig: 'belt', sigP: 0.22, style: 'plateaus', styles: ['plateaus', 'sawtooth', 'highway'], roll: 0.5, extra: ['floatbridge', 'dropper'] },
-    { name: '네온 도시', theme: 'neon', len: 37500, pit: 0.22, enemy: 0.48, spike: 0.16, hill: 66, sig: 'tunnel', sigP: 0.22, style: 'highway', styles: ['highway', 'plateaus', 'bumps'], roll: 0.4, extra: ['floatbridge', 'stones'] },
-    { name: '구름 섬', theme: 'sky', len: 40200, pit: 0.24, enemy: 0.50, spike: 0.18, hill: 68, sig: 'longgap', sigP: 0.22, style: 'islands', styles: ['islands', 'rollers', 'highway'], roll: 0.5, extra: ['stones', 'floatbridge'] },
-    { name: '수중 유적', theme: 'water', mud: true, len: 38900, pit: 0.14, enemy: 0.44, spike: 0.12, hill: 58, sig: null, sigP: 0, style: 'rollers', styles: ['rollers', 'plateaus', 'bumps'], roll: 0.5, extra: ['stones', 'floatbridge'], water: true },
+    { name: '초원 언덕', theme: 'grass', len: 24000, pit: 0.10, enemy: 0.30, spike: 0.00, hill: 46, sig: null, sigP: 0, style: 'rollers', styles: ['rollers', 'bumps', 'plateaus'], roll: 0.55, extra: ['stones'] },
+    { name: '모래 협곡', theme: 'desert', mud: true, len: 28500, pit: 0.14, enemy: 0.34, spike: 0.06, hill: 54, sig: 'valley', sigP: 0.20, style: 'dunes', styles: ['dunes', 'longslope', 'rollers'], roll: 0.5, extra: ['stones', 'dropper'] },
+    { name: '정글 숲', theme: 'jungle', mud: true, len: 30800, pit: 0.14, enemy: 0.38, spike: 0.06, hill: 56, sig: 'tramp', sigP: 0.18, style: 'bumps', styles: ['bumps', 'sawtooth', 'rollers'], roll: 0.6, extra: ['floatbridge', 'stones'] },
+    { name: '얼음 능선', theme: 'ice', len: 33200, pit: 0.16, enemy: 0.40, spike: 0.10, hill: 60, sig: 'iceslide', sigP: 0.20, style: 'longslope', styles: ['longslope', 'plateaus', 'bumps'], roll: 0.45, extra: ['dropper'] },
+    { name: '용암 화산', theme: 'lava', len: 34100, pit: 0.18, enemy: 0.42, spike: 0.12, hill: 62, sig: 'lavaflame', sigP: 0.22, style: 'sawtooth', styles: ['sawtooth', 'islands', 'dunes'], roll: 0.55, extra: ['dropper', 'floatbridge'] },
+    { name: '번개 공장', theme: 'factory', len: 36400, pit: 0.20, enemy: 0.46, spike: 0.14, hill: 64, sig: 'belt', sigP: 0.22, style: 'plateaus', styles: ['plateaus', 'highway', 'sawtooth'], roll: 0.5, extra: ['floatbridge', 'dropper', 'stones'] },
+    { name: '네온 도시', theme: 'neon', len: 37500, pit: 0.22, enemy: 0.48, spike: 0.16, hill: 66, sig: 'tunnel', sigP: 0.22, style: 'highway', styles: ['highway', 'bumps', 'islands'], roll: 0.4, extra: ['floatbridge'] },
+    { name: '구름 섬', theme: 'sky', len: 40200, pit: 0.24, enemy: 0.50, spike: 0.18, hill: 68, sig: 'longgap', sigP: 0.22, style: 'islands', styles: ['islands', 'rollers', 'longslope'], roll: 0.5, extra: ['stones', 'floatbridge'] },
+    { name: '수중 유적', theme: 'water', mud: true, len: 38900, pit: 0.14, enemy: 0.44, spike: 0.12, hill: 58, sig: null, sigP: 0, style: 'dunes', styles: ['dunes', 'rollers', 'bumps'], roll: 0.5, extra: ['stones'], water: true },
   ];
 
   // 코스마다 「무엇을 하는 코스인가」: 위쪽 보너스 길의 종류와 개수, 즐겨 나오는 장치(팔레트). 같은 구조가 모든 코스에 반복되지 않게 코스마다 다르게 정한다.
@@ -45,13 +45,13 @@ const LOGIC_SP = (() => {
   const ZONE_PROFILE = [
     { kinds: ['spring'], count: [1, 1], pal: [] },                                                                       // 초원: 기본 학습, 짧은 보너스 길 한 번
     { kinds: ['cave'], count: [1, 1], pal: ['halfpipe', 'corkscrew', 'mud', 'seesaw', 'bumper'] },                     // 사막: 모래 내리막으로 속도, 낮은 굴 지름길
-    { kinds: ['spring', 'zip', 'lift'], count: [2, 2], pal: ['seesaw', 'bumper', 'mud', 'wall', 'corkscrew'] },        // 정글: 올라가기의 대표
-    { kinds: ['slide'], count: [1, 1], pal: ['halfpipe', 'corkscrew', 'bumper', 'wall', 'tube', 'fan'] },              // 얼음: 긴 미끄럼과 안전한 착지
-    { kinds: ['lowjump'], count: [1, 2], pal: ['crusher', 'swing', 'wall', 'flipper', 'bumper', 'tube'] },             // 용암: 짧고 긴장되는 낮은 점프
-    { kinds: ['lift', 'zip', 'seesaw', 'fork'], count: [1, 2], pal: ['crusher', 'wall', 'gate', 'tube', 'flipper', 'bumper'] }, // 공장: 위(발판) 아래(땅) 갈림, 벽·분쇄기
-    { kinds: ['tubeline'], count: [1, 2], pal: ['tube', 'wall', 'gate', 'corkscrew', 'flipper', 'halfpipe'] },        // 네온: 터널 중심, 수직 점프 최소
-    { kinds: ['fan', 'seesaw', 'spring', 'basin'], count: [2, 2], pal: ['fan', 'seesaw', 'zip', 'flipper', 'swing', 'bumper'] }, // 구름 섬: 바람과 공중
-    { kinds: ['channel'], count: [1, 2], pal: ['current', 'tube', 'wall', 'crusher', 'swing', 'mud', 'seesaw'] },        // 수중: 위로 쌓지 않고 장애물 사이 헤엄
+    { kinds: ['spring', 'zip', 'lift'], count: [2, 2], pal: ['zip', 'lift', 'mud', 'wall', 'corkscrew'] },        // 정글: 올라가기의 대표
+    { kinds: ['slide'], count: [1, 1], pal: ['halfpipe', 'fan', 'corkscrew', 'bumper', 'swing'] },              // 얼음: 긴 미끄럼과 안전한 착지
+    { kinds: ['lowjump'], count: [1, 2], pal: ['swing', 'flipper', 'seesaw', 'gate'] },             // 용암: 짧고 긴장되는 낮은 점프
+    { kinds: ['lift', 'zip', 'seesaw', 'fork'], count: [1, 2], pal: ['crusher', 'gate', 'wall', 'lift', 'tube'] }, // 공장: 위(발판) 아래(땅) 갈림, 벽·분쇄기
+    { kinds: ['tubeline'], count: [1, 2], pal: ['tube', 'corkscrew', 'halfpipe', 'flipper', 'wall'] },        // 네온: 터널 중심, 수직 점프 최소
+    { kinds: ['fan', 'seesaw', 'spring', 'basin'], count: [2, 2], pal: ['fan', 'zip', 'lift', 'seesaw', 'swing'] }, // 구름 섬: 바람과 공중
+    { kinds: ['channel'], count: [1, 2], pal: ['current', 'mud', 'tube', 'crusher', 'seesaw'] },        // 수중: 위로 쌓지 않고 장애물 사이 헤엄
   ];
   const rng = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -242,7 +242,7 @@ const LOGIC_SP = (() => {
       highway: { f1: [260, 300, 360], up: [50, 60, 70], f2: [220, 260, 300] }, islands: { n: [1, 2, 3], d: [40, 46, 54], w: [180, 220, 260] },
     };
     const pickTerrain = () => {                                       // 아직 안 쓴 땅 모양 조합을 고른다. 직전과 같은 모양은 피한다
-      const c = Z.styles.filter((q) => q !== lastStyle).sort(() => rnd() - 0.5);
+      const c = Z.styles.filter((q) => q !== lastStyle).sort(() => rnd() - 0.5); if (c.includes(Z.style) && rnd() < 0.5) c.splice(0, 0, c.splice(c.indexOf(Z.style), 1)[0]);      // 코스의 주인공 땅 모양이 절반쯤 먼저 나온다
       for (const st of c) { const o = pick('terrain:' + st, TERR[st]); if (o) { o.st = st; return o; } }
       return null;
     };

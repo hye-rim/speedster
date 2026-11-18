@@ -24,7 +24,7 @@ test('every zone and several seeds make a valid course: flat start, narrow pits,
     for (let i = 0; i <= v.len; i++) {
       if (!Number.isFinite(v.H[i])) { pit++; maxPit = Math.max(maxPit, pit); } else { pit = 0; if (i > 0 && Number.isFinite(v.H[i - 1])) steep = Math.max(steep, Math.abs(v.H[i] - v.H[i - 1])); assert.ok(v.H[i] >= L.Y_MIN - 1 && v.H[i] <= L.Y_MAX + 1, 'height range'); }
     }
-    const wide = v.longGaps.length > 0, bridge = v.movers + v.stonesN > 0; assert.ok(maxPit >= 40 && (wide || bridge || maxPit <= L.PIT_LIMIT + 2), 'pit width ' + maxPit); if (wide && !bridge) assert.ok(maxPit <= 230, 'long gaps stay under 230: ' + maxPit); if (bridge) assert.ok(maxPit <= 335, 'bridge pits stay under 335: ' + maxPit);
+    const wide = v.longGaps.length > 0, bridge = v.movers + v.stonesN > 0 || v.routes.includes('lowjump'); assert.ok(maxPit >= 40 && (wide || bridge || maxPit <= L.PIT_LIMIT + 2), 'pit width ' + maxPit); if (wide && !bridge) assert.ok(maxPit <= 230, 'long gaps stay under 230: ' + maxPit); if (bridge) assert.ok(maxPit <= 335, 'bridge pits stay under 335: ' + maxPit);
     assert.ok(steep < 0.8, 'no wall-like step on the ground: ' + steep);
     assert.ok(Number.isFinite(v.H[v.goalX]) && Number.isFinite(v.H[v.len]), 'ground at the goal');
     assert.strictEqual(v.checks.length, 2);
@@ -574,9 +574,10 @@ test('swinging ball and crusher: a standing runner is hit, a rolling one passes 
 test('gimmicks appear by zone (bumpers from the 2nd, swinging balls from the 4th, crushers from the 6th) and always stand on flat ground', () => {
   const n = (z, key) => { let a = 0; for (let s = 1; s <= 14; s++) a += L.buildLevel(z, s)[key].length; return a / 14; };       // 코스마다 장치 몇 가지만 골라 쓰므로, 시드 여러 개 중 한 번이라도 나오는지 본다
   assert.strictEqual(n(0, 'bumpers') + n(0, 'swings') + n(0, 'crushers'), 0);
-  for (let z = 1; z < L.ZONES.length; z++) assert.ok(n(z, 'bumpers') > 0, 'bumpers in zone ' + z);
+  const pal = (z, k) => L.ZONE_PROFILE[z].pal.includes(k);       // 코스의 팔레트에 있는 장치는 나오고, 아직 열리지 않은 코스에는 안 나온다
+  for (let z = 1; z < L.ZONES.length; z++) if (pal(z, 'bumper')) assert.ok(n(z, 'bumpers') > 0, 'bumpers in zone ' + z);
   for (let z = 0; z < 3; z++) assert.strictEqual(n(z, 'swings'), 0); for (let z = 0; z < 5; z++) assert.strictEqual(n(z, 'crushers'), 0);
-  for (let z = 3; z < L.ZONES.length; z++) assert.ok(n(z, 'swings') > 0, 'swings in zone ' + z); for (let z = 5; z < L.ZONES.length; z++) assert.ok(n(z, 'crushers') > 0, 'crushers in zone ' + z);
+  for (let z = 3; z < L.ZONES.length; z++) if (pal(z, 'swing')) assert.ok(n(z, 'swings') > 0, 'swings in zone ' + z); for (let z = 5; z < L.ZONES.length; z++) if (pal(z, 'crusher')) assert.ok(n(z, 'crushers') > 0, 'crushers in zone ' + z);
   for (let z = 1; z < L.ZONES.length; z++) for (let s = 1; s <= 6; s++) {
     const v = L.buildLevel(z, s), flatAt = (x0, x1, y) => { for (let x = Math.floor(x0); x <= x1; x += 6) if (Math.abs(v.H[x] - y) > 0.01) return false; return true; };
     for (const b of v.bumpers) assert.ok(Number.isFinite(v.H[Math.floor(b.x)]) && v.H[Math.floor(b.x)] - b.y >= 38, 'bumpers hang above the ground so you can walk under');
@@ -667,8 +668,10 @@ test('fan: wind lifts him up in the air above the vent but not on the ground, an
 test('new sections by zone: corkscrews from the 2nd, tubes and walls from the 3rd, fans from the 4th, mud in desert, jungle and water, all on flat ground', () => {
   const n = (z, key) => { let a = 0; for (let s = 1; s <= 14; s++) a += L.buildLevel(z, s)[key].length; return a / 14; };
   for (const k of ['corks', 'tubes', 'walls', 'fans', 'mud']) assert.strictEqual(n(0, k), 0, k + ' not in zone one');
-  for (let z = 1; z < L.ZONES.length; z++) if (!L.ZONES[z].water) assert.ok(n(z, 'corks') > 0, 'corkscrew in zone ' + z);
-  for (let z = 2; z < L.ZONES.length; z++) { assert.ok(n(z, 'tubes') > 0 && n(z, 'walls') > 0, 'tube and wall in zone ' + z); } for (let z = 3; z < L.ZONES.length; z++) assert.ok(n(z, 'fans') > 0, 'fan in zone ' + z);
+  const pal = (z, k) => L.ZONE_PROFILE[z].pal.includes(k);
+  for (let z = 1; z < L.ZONES.length; z++) if (!L.ZONES[z].water && pal(z, 'corkscrew')) assert.ok(n(z, 'corks') > 0, 'corkscrew in zone ' + z);
+  for (let z = 2; z < L.ZONES.length; z++) { if (pal(z, 'tube')) assert.ok(n(z, 'tubes') > 0, 'tube in zone ' + z); if (pal(z, 'wall')) assert.ok(n(z, 'walls') > 0, 'wall in zone ' + z); } for (let z = 3; z < L.ZONES.length; z++) if (pal(z, 'fan')) assert.ok(n(z, 'fans') > 0, 'fan in zone ' + z);
+  for (let z = 0; z < 1; z++) for (const k of ['corks', 'tubes', 'walls', 'fans']) assert.strictEqual(n(z, k), 0);
   for (const z of [0, 3, 4, 5, 6, 7]) assert.strictEqual(n(z, 'mud'), 0, 'no mud in zone ' + z); for (let z = 0; z < L.ZONES.length; z++) if (L.ZONES[z].mud) assert.ok(n(z, 'mud') > 0, 'mud where the zone allows it');
   for (let z = 1; z < L.ZONES.length; z++) for (let s = 1; s <= 5; s++) {
     const v = L.buildLevel(z, s), flat = (x0, x1, y) => { for (let x = Math.floor(x0); x <= x1; x += 6) if (Math.abs(v.H[x] - y) > 0.01) return false; return true; };
@@ -834,4 +837,23 @@ test('re-entry basin: falling off the platform chain lands in a sunken basin tha
   const st = L.newGame({ zone: 7, seed: s0 }); st.enemies = []; const first = st.level.plats.find((p) => p.x1 < sp.x && sp.x - p.x1 < 400 && sp.x - p.x1 > 150); L.spawn(st, sp.x - 360); st.p.inv = 0; st.rings = 5;
   let fell = false, landed = false; for (let i = 0; i < 900 && !landed; i++) { const dx = sp.x - st.p.x; L.step(st, { right: dx > 6, left: dx < -6 }); if (st.p.y > 150 && st.p.ground) fell = true; if (fell && st.p.ground && st.p.plat && st.p.plat.x0 <= sp.x && st.p.plat.x1 >= sp.x) landed = true; }
   assert.ok(st.phase === 'play' && fell && landed, 'down into the basin, then up on the middle platform: ' + st.phase);
+});
+
+// ---------- 코스끼리 겹침을 줄였는지 지키는 시험 (장치 팔레트 · 땅 모양 · 구간 구성 유사도) ----------
+test('courses do not share the same ingredients: each device is in at most four palettes, palettes overlap little, and terrain shapes and extras differ by course', () => {
+  const P = L.ZONE_PROFILE, count = {}; for (const q of P) for (const k of q.pal) count[k] = (count[k] || 0) + 1;
+  for (const [k, c] of Object.entries(count)) assert.ok(c <= 4, `${k} is in ${c} palettes`);
+  let worst = 0; for (let a = 0; a < P.length; a++) for (let b = a + 1; b < P.length; b++) worst = Math.max(worst, P[a].pal.filter((k) => P[b].pal.includes(k)).length); assert.ok(worst <= 3, 'two courses share ' + worst + ' devices');
+  for (let z = 1; z < P.length; z++) assert.ok(P[z].pal.length >= 4 && P[z].pal.some((k) => count[k] <= 2), 'every course has a device that is nearly its own: zone ' + z);
+  const styles = L.ZONES.map((q) => q.styles.slice().sort().join()); assert.strictEqual(new Set(styles).size, L.ZONES.length, 'no two courses share the same set of terrain shapes');
+  assert.ok(new Set(L.ZONES.map((q) => q.style)).size >= 8, 'courses have their own main terrain shape'); for (const q of L.ZONES) assert.strictEqual(q.styles[0], q.style, 'the main shape is first');
+  assert.ok(new Set(L.ZONES.map((q) => q.extra.slice().sort().join())).size >= 7, 'extra structures differ by course');
+});
+
+test('the mix of sections stays different from course to course: the average overlap of the distinctive sections is low and no pair is nearly the same', () => {
+  const base = new Set(['enemy', 'pit', 'ramp', 'spring', 'hill', 'pad', 'monitor', 'loop', 'spike', 'breather', 'highroad', 'tunnel', 'cannon']), Z = L.ZONES.length, seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], names = new Set(), zv = [];
+  for (let z = 0; z < Z; z++) { const m = {}; for (const s of seeds) { const v = L.buildLevel(z, s); for (const k of v.seq) { const n = k.split('|')[0]; if (n.startsWith('terrain') || base.has(n)) continue; m[n] = (m[n] || 0) + 1; names.add(n); } for (const [key, nm] of [['corks', 'o:cork'], ['tubes', 'o:tube'], ['walls', 'o:wall'], ['fans', 'o:fan'], ['mud', 'o:mud'], ['seesaws', 'o:seesaw'], ['flippers', 'o:flipper'], ['zips', 'o:zip'], ['doors', 'o:gate'], ['currents', 'o:current'], ['bumpers', 'o:bumper'], ['swings', 'o:swing'], ['crushers', 'o:crusher']]) { m[nm] = (m[nm] || 0) + v[key].length; names.add(nm); } for (const r of v.routes) { m['r:' + r] = (m['r:' + r] || 0) + 1; names.add('r:' + r); } } zv.push(m); }
+  const keys = [...names], vec = (m) => keys.map((k) => m[k] || 0), cos = (a, b) => { let d = 0, x = 0, y = 0; for (let i = 0; i < a.length; i++) { d += a[i] * b[i]; x += a[i] * a[i]; y += b[i] * b[i]; } return d / Math.sqrt(x * y || 1); };
+  let sum = 0, n = 0, max = 0, who = ''; for (let a = 0; a < Z; a++) for (let b = a + 1; b < Z; b++) { const c = cos(vec(zv[a]), vec(zv[b])); sum += c; n++; if (c > max) { max = c; who = `${a + 1}-${b + 1}`; } }
+  assert.ok(sum / n < 0.3, 'average overlap ' + (sum / n).toFixed(2)); assert.ok(max < 0.55, `most similar pair ${who}: ${max.toFixed(2)}`);
 });

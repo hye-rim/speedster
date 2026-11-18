@@ -37,7 +37,7 @@ function play(zone, seed, opts = {}) {
     if (st.phase === 'play' && p.ground) {
       const near = (arr, ahead) => arr.some((q) => q.x > p.x && q.x - p.x < ahead);
       const v = Math.max(3, Math.abs(p.gsp)); let pit = false; for (let d = 6; d <= v * 14; d += 6) if (!Number.isFinite(L.groundY(st.level, p.x + d))) { pit = true; break; }
-      const hazard = pit || near(st.level.lows.map((l) => ({ x: l.x0 })), v * 20) || near(st.level.cannons, v * 40) || near(st.level.swings.map((q) => ({ x: q.x - 110 })), v * 22) || near(st.level.walls.map((q) => ({ x: q.x - 40 })), v * 16) || near(st.level.crushers.map((q) => ({ x: q.x0 })), v * 22) || near(st.level.bumpers.map((q) => ({ x: q.x - 40 })), 0) || near(st.level.spikes, v * 14) || near(st.level.springs, v * 14) || st.enemies.some((e) => e.alive && e.x > p.x && e.x - p.x < v * 14);
+      const hazard = pit || near(st.level.lows.map((l) => ({ x: l.x0 })), v * 20) || near(st.level.cannons, v * 40) || near(st.level.swings.map((q) => ({ x: q.x - 110 })), v * 22) || near(st.level.walls.map((q, i) => (st.broke[i] ? null : { x: q.x + 30 })).filter(Boolean), v * 16 + 40) || near(st.level.crushers.map((q) => ({ x: q.x0 })), v * 22) || near(st.level.bumpers.map((q) => ({ x: q.x - 40 })), 0) || near(st.level.spikes, v * 14) || near(st.level.springs, v * 14) || st.enemies.some((e) => e.alive && e.x > p.x && e.x - p.x < v * 14);
       if (planLeft > 0) planLeft--;
       if (hazard && (planLeft <= 0 || (pit && plan.roll))) {                                  // 구르는 중에 구멍이 나타나면 다시 계획한다
         let best = null;

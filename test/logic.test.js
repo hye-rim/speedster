@@ -319,7 +319,7 @@ function runToSpring(zone, seed, speed, n) {
 
 test('every course has a bonus road or two: some way up (spring, fan, seesaw, lift or zip line), then floating platforms with rings and an item box above a safe flat floor', () => {
   for (let z = 0; z < L.ZONES.length; z++) for (const seed of [1, 4]) {
-    const v = L.buildLevel(z, seed); assert.ok(v.highs >= 1 && v.highs <= 2 && v.routes.length === v.highs, `bonus roads in zone ${z}: ${v.highs}`); const hp = v.plats.filter((p) => p.hr), up = v.routes.filter((k) => ['spring', 'fan', 'seesaw', 'lift', 'zip'].includes(k)).length; assert.ok(hp.length >= up * 3 && hp.length <= up * 5, 'platforms per road that goes up');
+    const v = L.buildLevel(z, seed); assert.ok(v.highs >= 1 && v.highs <= 2 && v.routes.length === v.highs, `bonus roads in zone ${z}: ${v.highs}`); const hp = v.plats.filter((p) => p.hr), up = v.routes.filter((k) => ['spring', 'fan', 'seesaw', 'lift', 'zip', 'fork'].includes(k)).length; assert.ok(hp.length >= up * 3 && hp.length <= up * 5, 'platforms per road that goes up');
     for (const m of v.monitors) if (m.y != null) assert.ok(v.plats.some((p) => m.x > p.x0 && m.x < p.x1 && p.y === m.y), 'a platform item box sits on a platform');
     for (const p of hp) { assert.ok(p.x1 - p.x0 >= 130 && p.y < 100, 'platforms are wide and well above the ground'); assert.ok(v.rings.some((r) => r.x > p.x0 && r.x < p.x1 && r.y < p.y), 'rings over a platform'); }
     for (const p of hp) for (let x = p.x0; x < p.x1; x += 20) assert.ok(Number.isFinite(v.H[x]) && v.H[x] - p.y >= 56, 'flat safe ground far below a platform');
@@ -356,7 +356,7 @@ test('each course has its own kinds of enemies instead of the same crab and bee'
 test('in every course and seed, every high-road spring lands you on a platform at slow, normal and fast running speed', () => {
   for (let z = 0; z < 8; z++) for (const seed of [1, 2, 3]) for (const speed of [2.5, 4, 6]) {
     const st = L.newGame({ zone: z, seed }); st.enemies = []; const lv = st.level;
-    for (const sp of lv.springs.filter((s) => lv.plats.some((p) => p.x0 > s.x + 100 && p.x0 < s.x + 400))) {
+    for (const sp of lv.springs.filter((s) => lv.plats.some((p) => p.x0 > s.x + 100 && p.x0 < s.x + 400) && !lv.plats.some((p) => p.x0 <= s.x && p.x1 >= s.x))) {      // 움푹한 바닥(재진입)의 스프링은 따로 시험한다
       L.spawn(st, sp.x - 160); st.p.inv = 99999; st.p.gsp = speed; let landed = false;
       for (let i = 0; i < 300 && !landed; i++) { L.step(st, { right: true }); if (st.p.plat) landed = true; }
       assert.ok(landed, `zone ${z} seed ${seed} speed ${speed} spring ${sp.x}`);
@@ -718,8 +718,9 @@ test('lift: the platform moves up and down, carries whoever stands on it, and th
 test('half-pipe, seesaw, flipper, zip and lift sections appear by zone on flat or deliberately shaped ground', () => {
   const n = (z, key) => { let a = 0; for (let s = 1; s <= 14; s++) { const v = L.buildLevel(z, s); a += key === 'lifts' ? v.plats.filter((q) => q.elev).length : key === 'halfpipe' ? v.seq.filter((k) => k.startsWith('halfpipe')).length : v[key].length; } return a / 14; };
   for (const k of ['seesaws', 'flippers', 'zips', 'lifts', 'halfpipe']) assert.strictEqual(n(0, k), 0, k + ' not in zone one');
-  for (let z = 1; z < L.ZONES.length; z++) { assert.ok(n(z, 'seesaws') > 0, 'seesaw in zone ' + z); if (!L.ZONES[z].water) assert.ok(n(z, 'halfpipe') > 0, 'half-pipe in zone ' + z); } assert.strictEqual(n(1, 'flippers') + n(1, 'zips') + n(1, 'lifts'), 0);
-  for (let z = 2; z < L.ZONES.length; z++) { assert.ok(n(z, 'flippers') > 0 && n(z, 'zips') > 0 && n(z, 'lifts') > 0, 'flipper, zip and lift in zone ' + z); }
+  const KEY = { seesaw: 'seesaws', flipper: 'flippers', zip: 'zips', lift: 'lifts', halfpipe: 'halfpipe' }, FROM = { seesaw: 1, halfpipe: 1, flipper: 2, zip: 2, lift: 2 };      // 코스의 팔레트에 있는 장치는 나와야 한다
+  for (let z = 1; z < L.ZONES.length; z++) for (const k of L.ZONE_PROFILE[z].pal) if (KEY[k] && z >= FROM[k] && !(k === 'halfpipe' && L.ZONES[z].water)) assert.ok(n(z, KEY[k]) > 0, `${k} in zone ${z}`);
+  assert.strictEqual(n(1, 'flippers') + n(1, 'zips') + n(1, 'lifts'), 0);
   for (let z = 1; z < L.ZONES.length; z++) for (let s = 1; s <= 5; s++) {
     const v = L.buildLevel(z, s), flat = (x0, x1, y) => { for (let x = Math.floor(x0); x <= x1; x += 6) if (Math.abs(v.H[x] - y) > 0.01) return false; return true; };
     for (const q of v.seesaws) assert.ok(flat(q.x - q.len / 2 - 20, q.x + q.len / 2 + 20, q.gy), 'flat under a seesaw');
@@ -783,7 +784,7 @@ test('every course has its own character: its own kinds of bonus road, its own f
   }
   assert.deepStrictEqual([...info[0].set], ['spring']); assert.deepStrictEqual([...info[1].set], ['cave']); assert.deepStrictEqual([...info[3].set], ['slide']); assert.deepStrictEqual([...info[6].set], ['tubeline']); assert.deepStrictEqual([...info[8].set], ['channel']);
   for (let z = 1; z < L.ZONES.length; z++) assert.notStrictEqual([...info[z].set].sort().join(), [...info[z - 1].set].sort().join(), `zone ${z} differs from the zone before`);
-  const all = new Set(); for (const q of info) for (const k of q.set) all.add(k); assert.strictEqual(all.size, 10, 'ten kinds of bonus road are used');
+  const all = new Set(); for (const q of info) for (const k of q.set) all.add(k); assert.strictEqual(all.size, 12, 'twelve kinds of bonus road are used');
   assert.ok(!info[3].set.has('spring') && !info[8].set.has('spring'), 'no climbing roads in the ice and the water courses');
 });
 
@@ -795,4 +796,42 @@ test('the new signature roads are built as planned: a cave of two low tunnels, a
   const tl = find(6, 'tubeline'); assert.ok(tl && tl.tubes.length >= 2 && tl.tubes.some((t, i) => tl.tubes.some((u, j) => j !== i && u.x > t.x1 && u.x - t.x1 < 200)), 'two tubes in a row');
   const ch = find(8, 'channel'); assert.ok(ch && ch.swings.length >= 2 && ch.crushers.length >= 1, 'a channel of swings and a crusher');
   for (const [v, k] of [[cave, 'cave'], [sl, 'slide'], [lj, 'lowjump'], [tl, 'tubeline'], [ch, 'channel']]) assert.ok(v.giant && v.routes.includes(k), k + ' has the giant ring');
+});
+
+// ---------- 2단계: 스위치와 문 · 물살과 기포 기둥 · 갈림길 · 재진입 ----------
+test('switch and door: stepping on the switch opens the door for seven seconds, a closed door blocks like a wall, and it closes again', () => {
+  const mk = () => { const st = world(); st.level.switches = [{ x: 300, gy: 150, id: 0 }]; st.level.doors = [{ x: 560, w: 14, gy: 150, h: 120, id: 0 }]; return st; };
+  const closed = mk(); closed.p.x = 450; closed.p.gsp = 5; run(closed, 80, { right: true }); assert.ok(closed.p.x < 556, 'a closed door stops him: ' + closed.p.x);
+  const open = mk(); open.p.x = 240; open.p.gsp = 4; let sw = false, through = false; for (let i = 0; i < 160; i++) { L.step(open, { right: true }); if (open.events.some((e) => e.t === 'switch')) sw = true; if (open.p.x > 600) through = true; } assert.ok(sw && through, 'the switch opens it and he runs through');
+  const late = mk(); late.p.x = 290; L.step(late, {}); assert.ok(late.gate[0] > late.t, 'the switch is on'); late.p.x = 450; late.p.gsp = 0; run(late, L.GATE_OPEN + 20, {}); late.p.x = 450; late.p.gsp = 5; run(late, 60, { right: true }); assert.ok(late.p.x < 556, 'it closed again after the time ran out');
+  const jump = mk(); jump.p.x = 250; jump.p.y = 40; jump.p.ground = false; jump.p.vy = 0; jump.p.vx = 6; for (let i = 0; i < 24; i++) L.step(jump, { right: true }); assert.ok(!jump.gate[0] && jump.p.x > 330, 'flying over the plate does not press it');
+  const back = mk(); back.gate[0] = 1e9; back.p.x = 700; back.p.gsp = -5; run(back, 60, { left: true }); assert.ok(back.p.x < 556, 'open means open from both sides');
+  for (let z = 4; z < L.ZONES.length; z++) for (let s = 1; s <= 6; s++) { const v = L.buildLevel(z, s); assert.strictEqual(v.switches.length, v.doors.length); for (const d of v.doors) { const w = v.switches.find((q) => q.id === d.id); assert.ok(w && d.x - w.x >= 240 && d.x - w.x <= 360, 'the door is a short run from its switch'); for (let x = w.x - 60; x <= d.x + 60; x += 6) assert.ok(Math.abs(v.H[Math.floor(x)] - d.gy) < 0.01, 'flat between switch and door'); } }
+  for (let z = 0; z < 4; z++) assert.strictEqual(L.buildLevel(z, 2).doors.length, 0, 'no doors in the early courses');
+});
+
+test('currents: a flow pushes sideways, a bubble column lifts him in the air but not on the ground, and only the water course has them', () => {
+  const flow = world(), still = world(); flow.level.currents = [{ x0: 100, x1: 2000, y0: 0, y1: 154, dx: 0.9, dy: 0 }]; run(flow, 120, {}); run(still, 120, {}); assert.ok(flow.p.x - still.p.x > 90, 'carried along: ' + (flow.p.x - still.p.x));
+  const back = world(); back.level.currents = [{ x0: 100, x1: 2000, y0: 0, y1: 154, dx: -0.9, dy: 0 }]; back.p.x = 400; run(back, 100, {}); assert.ok(back.p.x < 330, 'pushed back');
+  const up = world(); up.level.currents = [{ x0: 300, x1: 380, y0: 0, y1: 154, dx: 0, dy: -0.42 }]; up.p.x = 340; L.step(up, { jump: true, jumpHeld: true }); let top = 999; for (let i = 0; i < 120; i++) { L.step(up, { jumpHeld: true }); top = Math.min(top, up.p.y); } assert.ok(150 - top > 105, 'lifted far above a normal jump: ' + (150 - top));
+  const ground = world(); ground.level.currents = [{ x0: 300, x1: 380, y0: 0, y1: 154, dx: 0, dy: -0.42 }]; ground.p.x = 340; run(ground, 30, {}); assert.ok(ground.p.ground, 'a column does not pull a walker off the ground');
+  for (let z = 0; z < L.ZONES.length; z++) { let n = 0; for (let s = 1; s <= 8; s++) n += L.buildLevel(z, s).currents.length; assert.strictEqual(n > 0, !!L.ZONES[z].water, 'currents only in water: zone ' + z); }
+  for (let s = 1; s <= 8; s++) { const v = L.buildLevel(L.ZONES.findIndex((q) => q.water), s); for (const c of v.currents) { assert.ok(c.x1 > c.x0 && c.y0 === L.WATER_Y && (c.dx !== 0) !== (c.dy !== 0), 'a flow or a column'); for (let x = c.x0; x <= c.x1; x += 8) assert.ok(Number.isFinite(v.H[Math.floor(x)]), 'over solid ground'); } }
+});
+
+test('fork: the factory can offer a way up by lift over a ground road of spikes and a breakable wall, and the ground road is still passable', () => {
+  let v = null, s0 = 0; for (let s = 1; s <= 40 && !v; s++) { const t = L.buildLevel(5, s); if (t.routes.includes('fork')) { v = t; s0 = s; } } assert.ok(v, 'a fork in the factory');
+  const lift = v.plats.filter((q) => q.elev).find((q) => v.walls.some((w) => w.x > q.x1 && w.x - q.x1 < 900)); assert.ok(lift, 'a lift with a wall below its platforms'); const wall = v.walls.find((w) => w.x > lift.x1 && w.x - lift.x1 < 900);
+  assert.ok(v.spikes.some((k) => k.x > lift.x1 && k.x < wall.x), 'spikes before the wall'); assert.ok(v.plats.some((q) => q.hr && q.x0 > lift.x1 && q.x1 > wall.x - 100), 'the platforms above reach the wall');
+  const st = L.newGame({ zone: 5, seed: s0, boss: false }); st.enemies = []; L.spawn(st, wall.x - 520); st.p.inv = 0; st.rings = 20; let broke = false; for (let i = 0; i < 600; i++) { const nearSpike = v.spikes.some((k) => k.x > st.p.x && k.x - st.p.x < 70), nearWall = wall.x - st.p.x < 110 && wall.x - st.p.x > 0; L.step(st, { right: true, jump: nearSpike && st.p.ground, jumpHeld: !st.p.ground, down: nearWall || (st.p.roll && wall.x - st.p.x > -20) }); if (st.broke[v.walls.indexOf(wall)]) broke = true; if (st.p.x > wall.x + 100) break; } assert.ok(broke && st.p.x > wall.x + 60, 'the ground road can be taken: jump the spikes, roll through the wall');
+});
+
+test('re-entry basin: falling off the platform chain lands in a sunken basin that is not a pit, and the spring in the middle sends him back up onto the middle platform', () => {
+  let v = null, s0 = 0; for (let s = 1; s <= 40 && !v; s++) { const t = L.buildLevel(7, s); if (t.routes.includes('basin')) { v = t; s0 = s; } } assert.ok(v, 'a basin in the cloud islands');
+  const sp = v.springs.find((q) => v.plats.some((p) => p.x0 <= q.x && p.x1 >= q.x && v.H[Math.floor(q.x)] - p.y > 40)); assert.ok(sp, 'a spring under a platform'); const mid = v.plats.find((p) => p.x0 <= sp.x && p.x1 >= sp.x);
+  for (let x = sp.x - 300; x <= sp.x + 300; x += 5) assert.ok(Number.isFinite(v.H[x]), 'solid ground all along the basin');
+  assert.ok(v.H[Math.floor(sp.x)] - mid.y >= 60, 'the basin floor is well below the platforms'); assert.ok(v.giant && Math.abs(v.giant.x - sp.x) < 2, 'the giant ring floats above the middle platform');
+  const st = L.newGame({ zone: 7, seed: s0 }); st.enemies = []; const first = st.level.plats.find((p) => p.x1 < sp.x && sp.x - p.x1 < 400 && sp.x - p.x1 > 150); L.spawn(st, sp.x - 360); st.p.inv = 0; st.rings = 5;
+  let fell = false, landed = false; for (let i = 0; i < 900 && !landed; i++) { const dx = sp.x - st.p.x; L.step(st, { right: dx > 6, left: dx < -6 }); if (st.p.y > 150 && st.p.ground) fell = true; if (fell && st.p.ground && st.p.plat && st.p.plat.x0 <= sp.x && st.p.plat.x1 >= sp.x) landed = true; }
+  assert.ok(st.phase === 'play' && fell && landed, 'down into the basin, then up on the middle platform: ' + st.phase);
 });

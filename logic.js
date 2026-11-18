@@ -22,6 +22,7 @@ const LOGIC_SP = (() => {
   const TIME_PAR = [110, 122, 134, 146, 158, 170, 182, 200, 210];        // 이 시간(초) 안에 끝내면 시간 보너스
   const SAFE_AFTER = 580;                                        // 스프링·점프대·긴 틈 뒤로 이만큼은 위험물을 안 둔다
   const CORK_MIN = 4.5, CORK_H = 26, TUBE_MIN = 2.5, TUBE_V = 7.5, WALL_MIN = 2.5, FAN_LIFT = 0.8, FAN_UP = 4.2, MUD_DRAG = 0.985;   // 코르크스크루 최소 속도·높이 · 튜브 최소·이동 속도 · 부서지는 벽 최소 속도 · 바람 구멍 · 늪
+  const GATE_OPEN = 420;                                          // 스위치를 밟으면 문이 열려 있는 프레임(7초)
   const ZIP_V = 5.5, FLIP_COOL = 30, SPECIAL_TIME = 40 * 60, SPECIAL_NEED = 100, SPECIAL_LEN = 7200;       // 도르래 속도 · 플리퍼 재사용 대기 · 특별 스테이지 시간·필요한 링·길이
   const WATER_Y = 112, AIR_MAX = 20 * 60;                        // 수중 코스: 수면 높이 · 숨을 쉬지 않고 버티는 시간(프레임). 마지막 5초는 숫자를 센다
   const BELT_V = 1.3;                                            // 컨베이어가 밀어 주는 속도(px/프레임)
@@ -47,10 +48,10 @@ const LOGIC_SP = (() => {
     { kinds: ['spring', 'zip', 'lift'], count: [2, 2], pal: ['seesaw', 'bumper', 'mud', 'wall', 'corkscrew'] },        // 정글: 올라가기의 대표
     { kinds: ['slide'], count: [1, 1], pal: ['halfpipe', 'corkscrew', 'bumper', 'wall', 'tube', 'fan'] },              // 얼음: 긴 미끄럼과 안전한 착지
     { kinds: ['lowjump'], count: [1, 2], pal: ['crusher', 'swing', 'wall', 'flipper', 'bumper', 'tube'] },             // 용암: 짧고 긴장되는 낮은 점프
-    { kinds: ['lift', 'zip', 'seesaw'], count: [1, 2], pal: ['crusher', 'wall', 'tube', 'flipper', 'bumper', 'swing'] }, // 공장: 위(발판) 아래(땅) 갈림, 벽·분쇄기
-    { kinds: ['tubeline'], count: [1, 2], pal: ['tube', 'wall', 'corkscrew', 'flipper', 'halfpipe', 'bumper'] },        // 네온: 터널 중심, 수직 점프 최소
-    { kinds: ['fan', 'seesaw', 'spring'], count: [2, 2], pal: ['fan', 'seesaw', 'zip', 'flipper', 'swing', 'bumper'] }, // 구름 섬: 바람과 공중
-    { kinds: ['channel'], count: [1, 2], pal: ['tube', 'wall', 'crusher', 'swing', 'mud', 'bumper', 'seesaw'] },        // 수중: 위로 쌓지 않고 장애물 사이 헤엄
+    { kinds: ['lift', 'zip', 'seesaw', 'fork'], count: [1, 2], pal: ['crusher', 'wall', 'gate', 'tube', 'flipper', 'bumper'] }, // 공장: 위(발판) 아래(땅) 갈림, 벽·분쇄기
+    { kinds: ['tubeline'], count: [1, 2], pal: ['tube', 'wall', 'gate', 'corkscrew', 'flipper', 'halfpipe'] },        // 네온: 터널 중심, 수직 점프 최소
+    { kinds: ['fan', 'seesaw', 'spring', 'basin'], count: [2, 2], pal: ['fan', 'seesaw', 'zip', 'flipper', 'swing', 'bumper'] }, // 구름 섬: 바람과 공중
+    { kinds: ['channel'], count: [1, 2], pal: ['current', 'tube', 'wall', 'crusher', 'swing', 'mud', 'seesaw'] },        // 수중: 위로 쌓지 않고 장애물 사이 헤엄
   ];
   const rng = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -61,15 +62,15 @@ const LOGIC_SP = (() => {
   function buildLevel(zone, seed) {
     const Z = ZONES[zone], rnd = rng(seed * 977 + zone * 31 + 7), len = Z.len;
     const H = new Float32Array(len + 16001).fill(Infinity);          // 만들다가 끝이 늘어날 수 있어 여유를 둔다(마지막에 L.len 에 맞춰 자른다)
-    const L = { zone, name: Z.name, theme: Z.theme, sig: Z.sig, len, H, rings: [], enemies: [], springs: [], pads: [], spikes: [], checks: [], monitors: [], loops: [], ice: [], belts: [], longGaps: [], launches: [], seq: [], plats: [], highs: 0, pitN: 0, extras: 0, enemyN: 0, movers: 0, stonesN: 0, drops: 0, sigCount: 0, lows: [], cannons: [], lowN: 0, cannonN: 0, bumpers: [], swings: [], crushers: [], corks: [], tubes: [], walls: [], fans: [], mud: [], seesaws: [], flippers: [], zips: [], giant: null, routes: [], bubbles: [], waterY: Z.water ? WATER_Y : null, boss: null, featured: [], goalX: len - 260 };
+    const L = { zone, name: Z.name, theme: Z.theme, sig: Z.sig, len, H, rings: [], enemies: [], springs: [], pads: [], spikes: [], checks: [], monitors: [], loops: [], ice: [], belts: [], longGaps: [], launches: [], seq: [], plats: [], highs: 0, pitN: 0, extras: 0, enemyN: 0, movers: 0, stonesN: 0, drops: 0, sigCount: 0, lows: [], cannons: [], lowN: 0, cannonN: 0, bumpers: [], swings: [], crushers: [], corks: [], tubes: [], walls: [], fans: [], mud: [], seesaws: [], flippers: [], zips: [], switches: [], doors: [], currents: [], giant: null, routes: [], bubbles: [], waterY: Z.water ? WATER_Y : null, boss: null, featured: [], goalX: len - 260 };
     let x = 0, y = GROUND_REF;
     const smooth = (x0, y0, x1, y1) => { for (let i = x0; i <= x1 && i < H.length; i++) { const t = (i - x0) / Math.max(1, x1 - x0), s = t * t * (3 - 2 * t); H[i] = y0 + (y1 - y0) * s; } };
     const flat = (n) => { smooth(x, y, x + n, y); const a = x; x += n; return [a, x]; };
     // 구간 지문: 같은 코스 안에서는 종류+모양+크기가 똑같은 구간이 두 번 나오지 않는다.
     // pick(종류, {값이름: [후보…]}) 이 아직 안 쓴 조합을 골라 주고(없으면 null), mark(조합이름) 으로 "썼다"고 적는다. 같은 종류는 CAP 번까지만 나온다.
-    const used = new Set(), kindN = {}, sc = len / 19200, CAP = { tunnel: zone < 1 ? 0 : 2 + Math.floor(zone / 3), cannon: zone < 3 ? 0 : 1 + Math.floor((zone - 3) / 2), bumper: zone < 1 ? 0 : 1 + Math.floor(zone / 4), swing: zone < 3 ? 0 : 1 + Math.floor((zone - 3) / 3), crusher: zone < 5 ? 0 : 1 + Math.floor((zone - 5) / 3), corkscrew: zone < 1 || Z.water ? 0 : 1 + Math.floor(zone / 4), tube: zone < 2 ? 0 : 1 + Math.floor((zone - 2) / 3), wall: zone < 2 ? 0 : 1 + Math.floor((zone - 2) / 3), fan: zone < 3 ? 0 : 1 + Math.floor((zone - 3) / 3), mud: Z.mud ? 2 : 0, seesaw: zone < 1 ? 0 : 1 + Math.floor(zone / 4), flipper: zone < 2 ? 0 : 1 + Math.floor((zone - 2) / 4), zip: zone < 2 ? 0 : 1 + Math.floor((zone - 2) / 4), lift: zone < 2 ? 0 : 1 + Math.floor((zone - 2) / 3), halfpipe: zone < 1 || Z.water ? 0 : 1 + Math.floor(zone / 4), breather: 99, enemy: 3 + Math.floor(zone * 0.8), pit: Math.round(4 * sc), sig: Math.round(4 * sc) };       // 긴 코스일수록 같은 종류가 조금 더 나올 수 있다
+    const used = new Set(), kindN = {}, sc = len / 19200, CAP = { tunnel: zone < 1 ? 0 : 2 + Math.floor(zone / 3), cannon: zone < 3 ? 0 : 1 + Math.floor((zone - 3) / 2), bumper: zone < 1 ? 0 : 1 + Math.floor(zone / 4), swing: zone < 3 ? 0 : 1 + Math.floor((zone - 3) / 3), crusher: zone < 5 ? 0 : 1 + Math.floor((zone - 5) / 3), corkscrew: zone < 1 || Z.water ? 0 : 1 + Math.floor(zone / 4), tube: zone < 2 ? 0 : 1 + Math.floor((zone - 2) / 3), wall: zone < 2 ? 0 : 1 + Math.floor((zone - 2) / 3), fan: zone < 3 ? 0 : 1 + Math.floor((zone - 3) / 3), mud: Z.mud ? 2 : 0, seesaw: zone < 1 ? 0 : 1 + Math.floor(zone / 4), flipper: zone < 2 ? 0 : 1 + Math.floor((zone - 2) / 4), zip: zone < 2 ? 0 : 1 + Math.floor((zone - 2) / 4), lift: zone < 2 ? 0 : 1 + Math.floor((zone - 2) / 3), halfpipe: zone < 1 || Z.water ? 0 : 1 + Math.floor(zone / 4), gate: zone < 4 || Z.water ? 0 : 1 + Math.floor((zone - 4) / 3), current: Z.water ? 2 : 0, breather: 99, enemy: 3 + Math.floor(zone * 0.8), pit: Math.round(4 * sc), sig: Math.round(4 * sc) };       // 긴 코스일수록 같은 종류가 조금 더 나올 수 있다
     // 코스마다 장치(기믹)를 전부 쓰지 않고, 그 코스에 나올 수 있는 것 중 몇 가지만 골라 쓴다(코스가 지나치게 길어지지 않게, 할 때마다 구성이 달라지게)
-    const GIM = ['bumper', 'swing', 'crusher', 'corkscrew', 'tube', 'wall', 'fan', 'mud', 'seesaw', 'flipper', 'zip', 'lift', 'halfpipe'];
+    const GIM = ['bumper', 'swing', 'crusher', 'corkscrew', 'tube', 'wall', 'fan', 'mud', 'seesaw', 'flipper', 'zip', 'lift', 'halfpipe', 'gate', 'current'];
     { const elig = GIM.filter((k) => CAP[k] > 0), pal = ZONE_PROFILE[zone].pal, n = Math.min(elig.length, 4 + Math.floor(zone / 2)), mine = elig.filter((k) => pal.includes(k)).sort(() => rnd() - 0.5), other = elig.filter((k) => !pal.includes(k)).sort(() => rnd() - 0.5), keep = new Set(mine.slice(0, Math.max(1, n - 1)).concat(other.slice(0, Math.max(1, n - Math.min(mine.length, n - 1))))); for (const k of GIM) if (!keep.has(k)) CAP[k] = 0; L.featured = [...keep]; }       // 코스의 팔레트에서 대부분, 한두 가지는 밖에서
     const capOf = (k) => k.startsWith('terrain') ? Math.round(2 * sc) : k.startsWith('sig') ? CAP.sig : k in CAP ? CAP[k] : Math.round(3 * sc);
     const room = (k) => (kindN[k] || 0) < capOf(k);
@@ -183,17 +184,24 @@ const LOGIC_SP = (() => {
         x += W; flat(300); return;
       }
       if (K === 'tubeline') { flat(260); const t1 = addTube(360 + v * 20, 50, v % 3), t2 = (flat(120), addTube(440, 80, (v + 1) % 3)); giantAt(t2.x1 + 70, y - 80); flat(260); return; }
+      if (K === 'basin') {                                           // 재진입: 발판 줄을 건너다 떨어져도 움푹한 바닥에 안전하게 내려앉고, 가운데 스프링을 밟으면 발판 위로 되돌아온다
+        flat(240); if (y > 108) slopeTo(108 - y); const y0 = y; flat(120); const dn = Math.min(58, Y_MAX - y0 - 4), st2 = (dy, d) => { smooth(x, y, x + d, y + dy); const a = x; x += d; y += dy; return [a, x]; };
+        const [a1, b1] = st2(dn, 230); ringsLine(a1, b1, 30, 18, 1); const [a2, b2] = flat(360), cxm = (a2 + b2) / 2; L.springs.push({ x: cxm }); L.launches.push(cxm); ringsLine(a2, b2, 34, 20, 0);
+        const [a3, b3] = st2(-dn, 230); const py = y0 - 10;
+        for (const [pa, pb] of [[a1 + 10, a1 + 130], [cxm - 60, cxm + 60], [b3 - 130, b3 - 10]]) { L.plats.push({ x0: pa, x1: pb, y: py }); for (let r = pa + 14; r < pb - 6; r += 26) L.rings.push({ x: r, y: py - 22 }); }
+        giantAt(cxm, py - 90); flat(240); return;
+      }
       if (K === 'channel') {
         flat(260); for (let m = 0; m < 2; m++) { const [a, b] = flat(230); L.swings.push({ x: (a + b) / 2, y: y - 27 - 100, len: 100, per: 150 + 25 * ((v + m) % 3), ph: rnd() * 6.283, gy: y }); for (let r = a + 20; r < b - 10; r += 36) L.rings.push({ x: r, y: y - 30 }); flat(160); }
-        const [ca, cb] = flat(52); L.crushers.push({ x0: ca, x1: cb, gy: y, per: 150, ph: Math.floor(rnd() * 150) }); giantAt(cb + 90, y - 80); flat(260); return;
+        const [ca, cb] = flat(52); L.crushers.push({ x0: ca, x1: cb, gy: y, per: 150, ph: Math.floor(rnd() * 150) }); giantAt(cb + 90, y - 80); L.currents.push({ x0: ca - 640, x1: cb, y0: WATER_Y, y1: y + 4, dx: 0.7, dy: 0 }); flat(260); return;
       }
     };
     const PR = ZONE_PROFILE[zone], wantRoutes = PR.count[0] + (PR.count[1] > PR.count[0] && rnd() < 0.5 ? 1 : 0);               // 코스 성격에 따라 한두 번
     const highroad = () => {
       const kinds = PR.kinds, o = pick('highroad', { k: kinds, v: zone === 0 ? [0, 1] : zone === 1 ? [0, 1, 2] : [0, 1, 2, 3], d: [118, 126, 134, 142, 150] }); if (!o) return false; mark(o);
       guard();
-      const v = o.v, d1 = o.d, K = o.k;
-      if (['cave', 'slide', 'lowjump', 'tubeline', 'channel'].includes(K)) { signatureRoute(K, v, d1); safeUntil = x + SAFE_AFTER; L.highs++; L.routes.push(K); return true; }
+      const v = o.v, d1 = o.d, K0 = o.k, K = K0 === 'fork' ? 'lift' : K0;                       // fork = 승강기로 올라가는 위 길 + 아래 땅의 장애물 길(갈림길)
+      if (['cave', 'slide', 'lowjump', 'tubeline', 'channel', 'basin'].includes(K)) { signatureRoute(K, v, d1); safeUntil = x + SAFE_AFTER; L.highs++; L.routes.push(K); return true; }
       // 첫 발판은 들어가는 길에서 날아가 내려앉는 자리고, 뒤는 모양마다 달라요: 0 징검 · 1 계단 오르막 · 2 지그재그 · 3 움직이는 발판 건너기
       const first = K === 'spring' ? [0, 350, d1] : K === 'fan' ? [0, 300, 80] : K === 'seesaw' ? [0, 280, 100] : K === 'lift' ? [0, 190, 108] : [0, 240, 58];
       const rest = v === 0 ? [[70, 210, 150], [80, 230, 126], [70, 170, 136]]
@@ -216,7 +224,11 @@ const LOGIC_SP = (() => {
         cx = x1;
       });
       for (let r = a + 130; r < a + 560; r += 44) L.rings.push({ x: r, y: gy - 20 });
-      safeUntil = cx + SAFE_AFTER; L.highs++; L.routes.push(K); return true;
+      if (K0 === 'fork') {                                         // 아래 길: 가시(뛰어 넘기)와 벽(구르기로 부수기)이 이어진다. 위 길은 안전하지만 승강기를 타야 한다
+        L.spikes.push({ x: a + 330 }, { x: a + 390 }); L.walls.push({ x: a + 800, w: 14, gy, h: 120 });
+        for (const rx of [a + 470, a + 560, a + 650, a + 730, a + 900, a + 960]) L.rings.push({ x: rx, y: gy - 22 });
+      }
+      safeUntil = cx + SAFE_AFTER; L.highs++; L.routes.push(K0); return true;
     };
     // 코스마다 다른 땅의 생김새: 같은 평지 달리기가 아니라 코스마다 언덕·모래언덕·울퉁불퉁·긴 내리막·톱니·계단·고속도로·섬 모양이 이어진다
     const rise = (dy) => { const up = Math.min(dy, y - Y_MIN); if (up < 14) return null; return slopeTo(-up); };
@@ -400,6 +412,18 @@ const LOGIC_SP = (() => {
       for (let r = lx + 20; r < lx + 110; r += 24) L.rings.push({ x: r, y: top - 22 });
       flat(220); return true;
     };
+    make.gate = () => {                                           // 스위치와 문: 바닥 스위치를 밟으면 앞의 문이 7초 동안 열린다. 늦으면 문이 닫혀 길이 막힌다(속도 조절)
+      const o = pick('gate', { d: [240, 300], h: [110, 130], pre: [240, 300] }); if (!o) return false; mark(o); guard();
+      flat(o.pre); const [a, b] = flat(46), id = L.switches.length; L.switches.push({ x: (a + b) / 2, gy: y, id }); flat(o.d); const [c] = flat(14); L.doors.push({ x: c, w: 14, gy: y, h: o.h, id });
+      for (let k = 1; k <= 5; k++) L.rings.push({ x: b + k * (o.d / 6), y: y - 22 }); const [e, f] = flat(120); ringsLine(e, f, 30, 20, 1); flat(200); return true;
+    };
+    make.current = () => {                                        // 물살과 기포 기둥(수중): 흐름은 옆으로 밀고, 기둥은 위로 띄운다
+      const o = pick('current', { k: ['flow', 'flow', 'up'], len: [360, 440, 520], dir: [1, 1, -1] }); if (!o) return false; mark(o); guard();
+      flat(220);
+      if (o.k === 'flow') { const [a, b] = flat(o.len); L.currents.push({ x0: a, x1: b, y0: WATER_Y, y1: y + 4, dx: 0.9 * o.dir, dy: 0 }); ringsLine(a, b, 34, 24, 0); }
+      else { const [a, b] = flat(90); L.currents.push({ x0: a, x1: b, y0: WATER_Y, y1: y + 4, dx: 0, dy: -0.42 }); for (let k = 0; k < 6; k++) L.rings.push({ x: (a + b) / 2 + Math.sin(k * 1.4) * 14, y: y - 30 - k * Math.max(10, (y - WATER_Y - 50) / 6) }); }
+      flat(220); return true;
+    };
     make.halfpipe = () => {                                       // 하프파이프: 높은 곳에서 가파르게 내려가 바닥을 지나 반대쪽 벽을 올라간다. 속도를 받아 위에서 튀어 나간다
       const o = pick('halfpipe', { dn: [50, 56], d: [130, 150], bottom: [120, 200], lip: [60, 100] }); if (!o) return false; mark(o); guard();
       if (y > 112) slopeTo(112 - y);
@@ -510,7 +534,7 @@ const LOGIC_SP = (() => {
     const st = {
       zone, level, lives: opts.lives || START_LIVES, score: opts.score | 0, rings: 0, ringsTotal: 0, t: 0, events: [], phase: 'play', tutorial: !!opts.tutorial,
       checkX: 60, deaths: 0, kills: 0, spring: 0, maxSpeed: 0, chain: 0, nextLife: LIFE_RINGS, mon: new Set(), loopsRun: 0, monitorsBroken: 0,
-      enemies: [], clearT: 0, dyingT: 0, scatter: [], got: new Set(), cr: {}, gone: {}, mag: {}, bub: {}, bump: {}, broke: {}, ss: {}, flip: {}, emeralds: 0, giantTaken: false, sp: null, boss: null, bossOn: false, bossDown: false, bbombs: [], bshots: [], noBoss: opts.boss === false || !!opts.tutorial,
+      enemies: [], clearT: 0, dyingT: 0, scatter: [], got: new Set(), cr: {}, gone: {}, mag: {}, bub: {}, bump: {}, broke: {}, gate: {}, ss: {}, flip: {}, emeralds: 0, giantTaken: false, sp: null, boss: null, bossOn: false, bossDown: false, bbombs: [], bshots: [], noBoss: opts.boss === false || !!opts.tutorial,
     };
     st.enemies = level.enemies.map((e, i) => ({ id: i, type: e.type, skin: e.skin, spd: SKIN_SPD[e.skin], x: e.x, y: e.y, home: e.home, range: e.range, base: e.base, dir: i % 2 ? 1 : -1, alive: true, vy: 0 }));
     if (st.tutorial) st.enemies.unshift({ id: 900, type: 'crab', skin: SKINS[level.theme][0], spd: SKIN_SPD[SKINS[level.theme][0]], x: 640, y: groundY(level, 640), home: 640, range: 40, dir: 1, alive: true, vy: 0 });      // 연습: 처음에 게 한 마리
@@ -582,6 +606,8 @@ const LOGIC_SP = (() => {
     if (!p.moved && Math.abs(p.gsp) > 0.5) { p.moved = true; emit(st, { t: 'move' }); }
     bossWalls(st);
     stepWalls(st);
+    stepGates(st);
+    stepCurrents(st);
     stepFans(st);
     stepScatter(st);
     stepEnemies(st);
@@ -770,6 +796,26 @@ const LOGIC_SP = (() => {
       else { const left = p.x < w.x + w.w / 2; p.x = left ? w.x - 7 : w.x + w.w + 7; if (p.ground) p.gsp = left ? Math.min(0, p.gsp) : Math.max(0, p.gsp); p.vx = left ? Math.min(0, p.vx) : Math.max(0, p.vx); }
     }
   }
+  // 스위치와 문: 스위치를 밟으면 문이 GATE_OPEN 프레임 동안 열리고, 닫힌 문은 벽처럼 길을 막는다(부술 수 없다)
+  function stepGates(st) {
+    const L = st.level, p = st.p; if ((!L.doors.length && !L.switches.length) || p.loop || p.dead) return;
+    for (const w of L.switches) if (p.ground && Math.abs(p.x - w.x) <= 22 && Math.abs(p.y - w.gy) < 3) { if (st.t >= (st.gate[w.id] || 0)) emit(st, { t: 'switch', x: w.x, y: w.gy }); st.gate[w.id] = st.t + GATE_OPEN; }
+    for (const d of L.doors) {
+      if (st.t < (st.gate[d.id] || 0) || Math.abs(p.x - d.x) > 40) continue;
+      if (!overlap(pbox(p), { x: d.x, y: d.gy - d.h, w: d.w, h: d.h })) continue;
+      const left = p.x < d.x + d.w / 2; p.x = left ? d.x - 7 : d.x + d.w + 7; if (p.ground) p.gsp = left ? Math.min(0, p.gsp) : Math.max(0, p.gsp); p.vx = left ? Math.min(0, p.vx) : Math.max(0, p.vx);
+    }
+  }
+  // 물살(옆으로 밀기)과 기포 기둥(공중에서 위로 띄우기): 수중 코스
+  function stepCurrents(st) {
+    const L = st.level, p = st.p; if (!L.currents.length || p.loop || p.dead) return;
+    for (const c of L.currents) if (p.x >= c.x0 && p.x <= c.x1 && p.y >= c.y0 && p.y <= c.y1 + 2) {
+      if (c.dx) { p.x += c.dx; if (p.ground && c.dx * p.gsp < 0 && Math.abs(p.gsp) < 0.3) p.gsp = 0; }
+      if (c.dy && !p.ground) p.vy = Math.max(p.vy + c.dy, -3.4);
+      if (!p.cur) { p.cur = true; emit(st, { t: 'current' }); } return;
+    }
+    p.cur = false;
+  }
   function stepFans(st) {                                          // 바람 구멍 위의 공중에서는 위로 떠오른다(최대 FAN_UP)
     const L = st.level, p = st.p; if (!L.fans.length || p.ground || p.loop || p.dead) return;
     for (const f of L.fans) if (Math.abs(p.x - f.x) < f.w / 2 && p.y < f.gy + 4 && p.y > f.top - 30) { p.vy = Math.max(p.vy - FAN_LIFT, -FAN_UP); if (!p.fanned) { p.fanned = true; emit(st, { t: 'fan' }); } return; }
@@ -920,6 +966,6 @@ const LOGIC_SP = (() => {
   const viewWidth = (availW, availH) => clamp(Math.round(VH * availW / Math.max(1, availH)), VW_MIN, VW_MAX);
 
   return { VW_MIN, VW_MAX, viewWidth, viewHeight, camShift, VH_MAX, CAM_TOP, CAM_BOTTOM, camTargetY, VW, VH, ACC, DEC, FRC, TOP, SLOPE, GRAV, JUMP, MAX_GSP, SPRING_V, PAD_V, INVULN, GROUND_REF, Y_MIN, Y_MAX, PIT_LIMIT, ZONES, TIME_PAR, START_LIVES,
-    BELT_V, SAFE_AFTER, SKINS, DROP_SKIN, CRUMBLE_T, CRUMBLE_GONE, platOff, LOOP_R, LOOP_W, LOOP_MIN, SCATTER_MAX, CHAIN_POINTS, LIFE_RINGS, DASH_BASE, SHOES_TIME, INVINC_TIME, LOW_H, LOW_TOP, SHOT_LIFE, shotsOf, ZONE_PROFILE, WATER_Y, AIR_MAX, ZIP_V, SPECIAL_TIME, SPECIAL_NEED, SPECIAL_LEN, buildSpecial, CORK_MIN, CORK_H, TUBE_MIN, TUBE_V, WALL_MIN, MUD_DRAG, swingPos, crushY, inWater, RING_GRAB, MAGNET_R, MAGNET_TIME, rng, buildLevel, groundY, angleAt, newGame, spawn, step, isSpin, canKill, pbox };
+    BELT_V, SAFE_AFTER, SKINS, DROP_SKIN, CRUMBLE_T, CRUMBLE_GONE, platOff, LOOP_R, LOOP_W, LOOP_MIN, SCATTER_MAX, CHAIN_POINTS, LIFE_RINGS, DASH_BASE, SHOES_TIME, INVINC_TIME, LOW_H, LOW_TOP, SHOT_LIFE, shotsOf, ZONE_PROFILE, GATE_OPEN, WATER_Y, AIR_MAX, ZIP_V, SPECIAL_TIME, SPECIAL_NEED, SPECIAL_LEN, buildSpecial, CORK_MIN, CORK_H, TUBE_MIN, TUBE_V, WALL_MIN, MUD_DRAG, swingPos, crushY, inWater, RING_GRAB, MAGNET_R, MAGNET_TIME, rng, buildLevel, groundY, angleAt, newGame, spawn, step, isSpin, canKill, pbox };
 })();
 if (typeof module !== 'undefined') module.exports = LOGIC_SP;

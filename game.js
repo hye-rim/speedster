@@ -64,6 +64,7 @@ const sfx = {
   boing() { tone(220, 0.28, 'sine', 0.07, 700); tone(440, 0.2, 'triangle', 0.04, 500, 0.05); },
   flipclack() { tone(180, 0.08, 'square', 0.07, 120); tone(520, 0.12, 'triangle', 0.05, 300, 0.04); },
   special() { [523, 659, 784, 1046, 1318, 1568].forEach((f, k) => tone(f, 0.18, 'triangle', 0.06, 0, k * 0.09)); },
+  click() { tone(900, 0.05, 'square', 0.06, -300); tone(420, 0.12, 'triangle', 0.05, 200, 0.05); },
   over() { [392, 330, 262, 196].forEach((f, k) => tone(f, 0.3, 'triangle', 0.05, 0, k * 0.16)); },
 };
 
@@ -207,6 +208,8 @@ function handle(events) {
     else if (e.t === 'zipend') sfx.skill();
     else if (e.t === 'specialin') { sfx.special(); shake = 6; banner2 = { text: 'SPECIAL STAGE', sub: '링을 ' + L.SPECIAL_NEED + '개 모아 끝까지!', t: 0 }; tutorialSignal('special'); }
     else if (e.t === 'special') { if (e.ok) { sfx.clear(); floats.push({ x: G.p.x, y: G.p.y - 40, t: 0, text: '에메랄드!' }); banner2 = { text: '에메랄드 획득!', sub: `링 ${e.collected}개 · ${e.emeralds}번째`, t: 0 }; } else { sfx.hurt(); banner2 = { text: '아쉬워요', sub: `링 ${e.collected}/${e.need}개`, t: 0 }; } }
+    else if (e.t === 'switch') { sfx.click(); burst(e.x, e.y - 6, '#7aff9a', 8, 2); floats.push({ x: e.x, y: e.y - 24, t: 0, text: '문 열림!' }); tutorialSignal('switch'); }
+    else if (e.t === 'current') tutorialSignal('current');
     else if (e.t === 'shieldbreak') { sfx.shield(); burst(G.p.x, G.p.y - 12, '#8ad0ff', 12, 2.4); }
     else if (e.t === 'rev') { sfx.rev(e.charge); tutorialSignal('rev'); }
     else if (e.t === 'spindash') { sfx.dash(); burst(G.p.x - 6 * G.p.face, G.p.y - 2, '#e8e0c0', 10, 2); tutorialSignal('spindash'); }
@@ -468,6 +471,28 @@ function drawGimmicks() {
     ctx.strokeStyle = 'rgba(235,248,255,.6)'; ctx.lineWidth = 1.5; for (let i = 0; i < 6; i++) { const ph = (clock * 1.6 + i * 0.31) % 1, yy = f.gy - ph * (f.gy - f.top), xx = sx2 + Math.sin(i * 2.1 + clock * 3) * f.w * 0.35; ctx.globalAlpha = 1 - ph; ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx, yy - 10); ctx.stroke(); } ctx.globalAlpha = 1;
     ctx.fillStyle = '#4a5068'; ctx.fillRect(sx2 - f.w / 2 - 3, f.gy - 8, f.w + 6, 8); ctx.fillStyle = '#8a90a8'; ctx.fillRect(sx2 - f.w / 2 - 3, f.gy - 8, f.w + 6, 2);
     const bw = Math.abs(Math.cos(clock * 14)) * f.w * 0.45 + 4; ctx.fillStyle = '#d8dce8'; ctx.beginPath(); ctx.ellipse(sx2, f.gy - 10, bw, 2.4, 0, 0, 6.283); ctx.fill();
+  }
+  for (const w of L0.switches) {                                                    // 스위치: 바닥 판. 눌려 있는 동안 불이 초록
+    const sx2 = w.x - camX; if (sx2 < -30 || sx2 > VW + 30) continue; const on = G.t < (G.gate[w.id] || 0);
+    ctx.fillStyle = '#3a3f54'; ctx.fillRect(sx2 - 22, w.gy - 3, 44, 3); ctx.fillStyle = on ? '#4aff8a' : '#ff4a5a'; ctx.fillRect(sx2 - 14, w.gy - (on ? 2 : 6), 28, on ? 2 : 4); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(sx2 - 14, w.gy - (on ? 2 : 6), 28, on ? 2 : 4);
+    if (!on) { ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.font = '900 9px -apple-system, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('밟아요', sx2, w.gy - 14); }
+  }
+  for (const d of L0.doors) {                                                       // 문: 닫히면 철판, 열리면 위로 들려 있고 남은 시간이 줄어든다
+    const sx2 = d.x - camX; if (sx2 < -30 || sx2 > VW + 30) continue; const left = Math.max(0, (G.gate[d.id] || 0) - G.t), open = left > 0, lift = open ? Math.min(1, left / 20) * d.h * 0.9 : 0;
+    ctx.fillStyle = '#5a6078'; ctx.fillRect(sx2 - 4, d.gy - d.h - 6, d.w + 8, 6); ctx.fillStyle = '#8a90a8'; ctx.fillRect(sx2 - 4, d.gy - d.h - 6, d.w + 8, 2);
+    if (!open || left < 20) { const h2 = open ? d.h - lift : d.h; ctx.fillStyle = '#4a5068'; ctx.fillRect(sx2, d.gy - h2, d.w, h2); ctx.fillStyle = '#7a8098'; ctx.fillRect(sx2, d.gy - h2, 3, h2); ctx.fillStyle = '#ffd23a'; for (let y = d.gy - h2 + 6; y < d.gy - 6; y += 14) ctx.fillRect(sx2 + 3, y, d.w - 6, 4); ctx.strokeStyle = OUTLINE[L0.theme] || '#1a1030'; ctx.lineWidth = 1.6; ctx.strokeRect(sx2, d.gy - h2, d.w, h2); }
+    ctx.fillStyle = open ? (left < 120 && Math.floor(G.t / 6) % 2 ? '#ffb02a' : '#4aff8a') : '#ff4a5a'; ctx.beginPath(); ctx.arc(sx2 + d.w / 2, d.gy - d.h - 12, 3.4, 0, 6.283); ctx.fill();
+    if (open) { ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(sx2 - 10, d.gy - d.h - 24, 34, 5); ctx.fillStyle = '#4aff8a'; ctx.fillRect(sx2 - 9, d.gy - d.h - 23, 32 * left / L.GATE_OPEN, 3); }
+  }
+  for (const c of L0.currents) {                                                    // 물살: 흐르는 방향의 줄기 / 기포 기둥
+    if (c.x1 - camX < 0 || c.x0 - camX > VW) continue; const x0 = c.x0 - camX, x1 = c.x1 - camX, w = x1 - x0, h = c.y1 - c.y0;
+    ctx.fillStyle = 'rgba(190,235,255,.07)'; ctx.fillRect(x0, c.y0, w, h);
+    ctx.strokeStyle = 'rgba(235,250,255,.55)'; ctx.fillStyle = 'rgba(235,250,255,.7)'; ctx.lineWidth = 1.2;
+    for (let i = 0; i < Math.max(4, Math.floor(w / 40)); i++) {
+      if (c.dx) { const ph = ((clock * 40 * Math.sign(c.dx) + i * 61) % w + w) % w, yy = c.y0 + 10 + ((i * 37) % Math.max(10, h - 20)); ctx.globalAlpha = 0.9; ctx.beginPath(); ctx.moveTo(x0 + ph, yy); ctx.lineTo(x0 + ph + 12 * Math.sign(c.dx), yy); ctx.lineTo(x0 + ph + 8 * Math.sign(c.dx), yy - 2); ctx.moveTo(x0 + ph + 12 * Math.sign(c.dx), yy); ctx.lineTo(x0 + ph + 8 * Math.sign(c.dx), yy + 2); ctx.stroke(); }
+      else { const ph = (clock * 0.9 + i * 0.27) % 1, xx = x0 + w / 2 + Math.sin(i * 2.3 + clock * 2) * w * 0.3, yy = c.y1 - ph * h; ctx.globalAlpha = 1 - ph * 0.6; ctx.beginPath(); ctx.arc(xx, yy, 1.6 + (i % 3), 0, 6.283); ctx.stroke(); }
+    }
+    ctx.globalAlpha = 1;
   }
   for (let i = 0; i < L0.seesaws.length; i++) {                                     // 시소: 한쪽이 내려앉은 널빤지. 밟으면 반대로 기울며 튕긴다
     const q = L0.seesaws[i], sx2 = q.x - camX; if (sx2 < -70 || sx2 > VW + 70) continue; const since = G.t - (G.ss[i] === undefined ? -99 : G.ss[i]), ang = since < 24 ? -0.2 + 0.4 * Math.min(1, since / 8) : -0.2;

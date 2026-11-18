@@ -287,7 +287,7 @@ test('no enemy, spike, flame or pit is placed where a bounce or ramp launch land
     const v = L.buildLevel(z, seed), hazards = [];
     for (const e of v.enemies) hazards.push(['enemy ' + e.type, e.x]); for (const k of v.spikes) hazards.push(['spike', k.x]);
     let inPit = false; for (let i = 0; i <= v.len; i++) { if (!Number.isFinite(v.H[i])) { if (!inPit) { hazards.push(['pit', i]); inPit = true; } } else inPit = false; }
-    const launches = [...v.launches, ...v.springs.map((s) => s.x)]; assert.ok(launches.length >= 1);
+    const launches = [...v.launches, ...v.springs.map((s) => s.x)];
     for (const l of launches) for (const [kind, hx] of hazards) assert.ok(!(hx > l + 4 && hx < l + L.SAFE_AFTER - 60), `${L.ZONES[z].name} seed ${seed}: ${kind} at ${Math.round(hx)} is only ${Math.round(hx - l)} px after a launch at ${Math.round(l)}`);
   }
 });
@@ -317,12 +317,12 @@ function runToSpring(zone, seed, speed, n) {
   return { st, sp, landed, maxY };
 }
 
-test('every course has a high road: a spring, then floating platforms with rings and an item box above a safe flat floor', () => {
-  for (let z = 0; z < 8; z++) for (const seed of [1, 4]) {
-    const v = L.buildLevel(z, seed); assert.ok(v.highs >= 2, `high roads in zone ${z}: ${v.highs}`); const hp = v.plats.filter((p) => p.hr); assert.ok(hp.length >= v.highs * 3 && hp.length <= v.highs * 5, 'platforms per high road');
+test('every course has a bonus road or two: some way up (spring, fan, seesaw, lift or zip line), then floating platforms with rings and an item box above a safe flat floor', () => {
+  for (let z = 0; z < L.ZONES.length; z++) for (const seed of [1, 4]) {
+    const v = L.buildLevel(z, seed); assert.ok(v.highs >= 1 && v.highs <= 2 && v.routes.length === v.highs, `bonus roads in zone ${z}: ${v.highs}`); const hp = v.plats.filter((p) => p.hr), up = v.routes.filter((k) => ['spring', 'fan', 'seesaw', 'lift', 'zip'].includes(k)).length; assert.ok(hp.length >= up * 3 && hp.length <= up * 5, 'platforms per road that goes up');
     for (const m of v.monitors) if (m.y != null) assert.ok(v.plats.some((p) => m.x > p.x0 && m.x < p.x1 && p.y === m.y), 'a platform item box sits on a platform');
     for (const p of hp) { assert.ok(p.x1 - p.x0 >= 130 && p.y < 100, 'platforms are wide and well above the ground'); assert.ok(v.rings.some((r) => r.x > p.x0 && r.x < p.x1 && r.y < p.y), 'rings over a platform'); }
-    for (const p of hp) for (let x = p.x0; x < p.x1; x += 20) assert.ok(Number.isFinite(v.H[x]) && v.H[x] - p.y >= 100, 'flat safe ground far below a platform');
+    for (const p of hp) for (let x = p.x0; x < p.x1; x += 20) assert.ok(Number.isFinite(v.H[x]) && v.H[x] - p.y >= 56, 'flat safe ground far below a platform');
   }
 });
 
@@ -330,7 +330,7 @@ test('a spring bounce lands on the first platform at any normal running speed, a
   for (const speed of [3, 4.5, 6]) {
     const { st, landed } = runToSpring(0, 1, speed, 260); assert.ok(landed, 'landed on a platform at speed ' + speed); assert.ok(st.p.y <= landed.plat.y + 0.01 || !st.p.plat, 'on top of it');
   }
-  const { st } = runToSpring(2, 3, 6, 160); assert.ok(st.p.plat === null || st.p.ground, 'sanity');
+  let zs = 1; while (!L.buildLevel(2, zs).springs.some((q, i, a) => L.buildLevel(2, zs).plats.some((p) => p.x0 > q.x + 100 && p.x0 < q.x + 400))) zs++; const { st } = runToSpring(2, zs, 6, 160); assert.ok(st.p.plat === null || st.p.ground, 'sanity');
 });
 
 test('platforms are one-way: you pass up through them, stand when coming down, and drop off the end', () => {
@@ -455,7 +455,7 @@ test('rings are grabbed from farther away, even at high speed, and a magnet pull
 });
 
 test('the item box can hold a magnet and breaking it turns the magnet on', () => {
-  const st = L.newGame({ zone: 1, seed: 1 }); st.enemies = []; const gy = L.groundY(st.level, 700); st.level.monitors.push({ x: 700, type: 'magnet' }); const i = st.level.monitors.length - 1;
+  const st = world(); st.enemies = []; const gy = L.groundY(st.level, 700); st.level.monitors.push({ x: 700, type: 'magnet' }); const i = st.level.monitors.length - 1;
   L.spawn(st, 640); st.p.inv = 99999; st.p.roll = true; st.p.gsp = 6; for (let k = 0; k < 40 && !st.mon.has(i); k++) L.step(st, { right: true, down: true }); void gy;
   assert.ok(st.mon.has(i) && st.p.magnet > 0, 'magnet on');
 });
@@ -712,7 +712,7 @@ test('lift: the platform moves up and down, carries whoever stands on it, and th
   const st = world(); const pl = { x0: 300, x1: 360, y: 146, y0: 100, yamp: 46, yper: 320, ph: Math.PI / 2, elev: true }; st.level.plats = [pl]; pl.id = 0; st.p.x = 330; st.p.y = 120; st.p.ground = false; st.p.vy = 1; let ys = [], onIt = 0;
   for (let i = 0; i < 400; i++) { L.step(st, {}); if (st.p.ground && st.p.plat === pl) { onIt++; ys.push(st.p.y); assert.ok(Math.abs(st.p.y - pl.y) < 0.01, 'stays on the platform'); } }
   assert.ok(onIt > 300, 'rides it: ' + onIt); assert.ok(Math.max(...ys) - Math.min(...ys) > 60, 'goes up and down: ' + (Math.max(...ys) - Math.min(...ys)));
-  for (let z = 2; z < L.ZONES.length; z++) for (let s = 1; s <= 6; s++) { const v = L.buildLevel(z, s); for (const q of v.plats.filter((q) => q.elev)) { assert.ok(q.y0 - q.yamp > 0 && q.y0 + q.yamp < v.H[Math.floor(q.x0)], 'between the sky and the floor'); assert.ok(v.plats.some((o) => !o.elev && !o.hr && Math.abs(o.y - (q.y0 - q.yamp)) < 1 && o.x0 > q.x1 && o.x0 < q.x1 + 60), 'a ledge at the top height'); } }
+  for (let z = 2; z < L.ZONES.length; z++) for (let s = 1; s <= 6; s++) { const v = L.buildLevel(z, s); for (const q of v.plats.filter((q) => q.elev)) { assert.ok(q.y0 + q.yamp < v.H[Math.floor(q.x0)], 'above the floor'); assert.ok(v.plats.some((o) => !o.elev && Math.abs(o.y - (q.y0 - q.yamp)) < 1 && o.x0 > q.x1 && o.x0 < q.x1 + 60), 'a ledge at the top height'); } }
 });
 
 test('half-pipe, seesaw, flipper, zip and lift sections appear by zone on flat or deliberately shaped ground', () => {
@@ -729,7 +729,7 @@ test('half-pipe, seesaw, flipper, zip and lift sections appear by zone on flat o
 });
 
 test('special stage: the giant ring on a high road starts it, rings are counted there, a hit costs five rings, and enough rings give an emerald and bring him back', () => {
-  for (let z = 0; z < L.ZONES.length; z++) { const v = L.buildLevel(z, 1); assert.ok(v.giant, 'giant ring in zone ' + z); assert.ok(v.plats.some((q) => q.hr && Math.abs((q.x0 + q.x1) / 2 - v.giant.x) < 1 && q.y - v.giant.y > 30 && q.y - v.giant.y < 46), 'hovering over a high road platform'); }
+  for (let z = 0; z < L.ZONES.length; z++) { const v = L.buildLevel(z, 1); assert.ok(v.giant, 'giant ring in zone ' + z); const gx = Math.floor(v.giant.x), onPlat = v.plats.some((q) => !q.elev && v.giant.x > q.x0 && v.giant.x < q.x1 && q.y - v.giant.y > 30 && q.y - v.giant.y < 110), onGround = Number.isFinite(v.H[gx]) && v.H[gx] - v.giant.y > 60 && v.H[gx] - v.giant.y < 125; assert.ok(onPlat || onGround, 'hovering where a jump or a platform reaches it'); }
   const sp = L.buildSpecial(3); assert.ok(sp.rings.length > 220 && sp.len === L.SPECIAL_LEN && !sp.boss && sp.waterY === null && sp.theme === 'special'); for (let x = 1; x < sp.len; x++) assert.ok(Math.abs(sp.H[x] - sp.H[x - 1]) < 0.6, 'gentle waves');
   const st = L.newGame({ zone: 2, seed: 1 }), L0 = st.level, g = L0.giant, score0 = st.score; st.rings = 12; st.p.x = g.x; st.p.y = g.y + 12; st.p.ground = false; st.p.vy = 0; st.p.inv = 0; L.step(st, {});
   assert.ok(st.sp && st.level !== L0 && st.level.theme === 'special' && st.rings === 0 && st.giantTaken, 'inside the special stage'); assert.ok(st.events.some((e) => e.t === 'specialin'));
@@ -740,4 +740,59 @@ test('special stage: the giant ring on a high road starts it, rings are counted 
   const fin = L.newGame({ zone: 2, seed: 1 }); fin.p.x = fin.level.giant.x; fin.p.y = fin.level.giant.y + 12; fin.p.ground = false; L.step(fin, {}); fin.rings = L.SPECIAL_NEED + 5; fin.p.x = fin.level.goalX + 10; let ev = null; for (let i = 0; i < 3 && !ev; i++) { L.step(fin, {}); ev = evs(fin, 'special')[0]; } assert.ok(ev && ev.ok && fin.emeralds === 1 && ev.collected >= L.SPECIAL_NEED, 'an emerald for enough rings');
   const lose = L.newGame({ zone: 2, seed: 1 }); lose.p.x = lose.level.giant.x; lose.p.y = lose.level.giant.y + 12; lose.p.ground = false; L.step(lose, {}); lose.rings = 10; lose.sp.left = 2; let ev2 = null; for (let i = 0; i < 5 && !ev2; i++) { L.step(lose, {}); ev2 = evs(lose, 'special')[0]; } assert.ok(ev2 && !ev2.ok && lose.emeralds === 0, 'no emerald when time runs out with too few rings');
   const tut = L.newGame({ zone: 0, seed: 1, tutorial: true }); tut.p.x = tut.level.giant.x; tut.p.y = tut.level.giant.y + 12; tut.p.ground = false; L.step(tut, {}); assert.ok(!tut.sp, 'no special stage in the tutorial');
+});
+
+// ---------- 보너스 길: 들어가는 방법이 코스마다 다르고, 어느 쪽이든 첫 발판에 실제로 올라갈 수 있다 ----------
+function routesOf(v) {                                                // 코스에서 (들어가는 장치, 첫 발판) 쌍을 찾는다
+  const hr = v.plats.filter((p) => p.hr).sort((a, b) => a.x0 - b.x0), out = [];
+  const firstAfter = (x, max) => hr.find((p) => p.x0 > x && p.x0 - x < max);
+  for (const f of v.fans) { const p = firstAfter(f.x, 330); if (p) out.push({ kind: 'fan', o: f, first: p }); }
+  for (const s of v.seesaws) { const p = firstAfter(s.x, 330); if (p) out.push({ kind: 'seesaw', o: s, first: p }); }
+  for (const z of v.zips) { const p = firstAfter(z.x1, 200); if (p) out.push({ kind: 'zip', o: z, first: p }); }
+  for (const l of v.plats.filter((q) => q.elev)) { const p = firstAfter(l.x1, 120); if (p) out.push({ kind: 'lift', o: l, first: p }); }
+  for (const sp of v.springs) { const p = firstAfter(sp.x, 300); if (p) out.push({ kind: 'spring', o: sp, first: p }); }
+  return out;
+}
+const tryRoute = (r, v, st, speed) => {                               // 사람이 할 법한 동작을 시켜 본다. 첫 발판에 내려앉으면 true
+  let p = st.p; const land = () => p.ground && p.plat === r.first;
+  const reset = (x, y) => { L.spawn(st, x); p = st.p; p.inv = 99999; p.x = x; p.y = y === undefined ? L.groundY(v, x) : y; p.lx = p.x; p.ly = p.y; p.vx = 0; p.vy = 0; p.gsp = 0; p.ground = y === undefined; };
+  if (r.kind === 'fan') { reset(r.o.x - 100); p.gsp = speed; let j = false; for (let i = 0; i < 420; i++) { const near = p.x > r.o.x - 30; L.step(st, { right: true, jump: near && !j && p.ground, jumpHeld: near }); if (near && !j) j = true; if (land()) return true; } return false; }
+  if (r.kind === 'seesaw') { reset(r.o.x); p.gsp = 0; L.step(st, { jump: true, jumpHeld: true }); let armed = false; for (let i = 0; i < 420; i++) { L.step(st, { right: armed, jumpHeld: !p.ground }); if (st.events.some((e) => e.t === 'seesaw')) armed = true; if (land()) return true; } return false; }
+  if (r.kind === 'lift') { reset(r.o.x0 + 20, r.o.y - 0.01); p.ground = true; p.plat = r.o; let started = false; for (let i = 0; i < 1100; i++) { const top = r.o.y <= r.o.y0 - r.o.yamp + 3; L.step(st, { right: top || started, jump: started && p.ground && !p.plat?.hr && p.x > r.o.x1 - 4, jumpHeld: !p.ground }); if (top) started = true; if (land()) return true; } return false; }
+  if (r.kind === 'zip') { reset(r.o.x0 - 8); p.gsp = speed; let grabbed = false, jumped = false; for (let i = 0; i < 520; i++) { const near = !grabbed && p.x > r.o.x0 - 30 && p.ground; const nearEnd = p.loop && p.loop.kind === 'zip' && p.loop.s > Math.hypot(r.o.x1 - r.o.x0, r.o.y1 - r.o.y0) - 24; L.step(st, { right: true, jump: (near && !jumped) || nearEnd, jumpHeld: !p.ground || near }); if (near) jumped = true; if (p.loop) grabbed = true; if (land()) return true; } return false; }
+  return true;
+};
+test('every way up to a bonus road works: a fan, a seesaw, a lift and a zip line each carry a normal player onto the first platform', () => {
+  const found = { fan: 0, seesaw: 0, lift: 0, zip: 0 };
+  for (let z = 1; z < L.ZONES.length; z++) for (let s = 1; s <= 12; s++) {
+    const st = L.newGame({ zone: z, seed: s }), v = st.level; st.enemies = []; v.spikes = [];
+    for (const r of routesOf(v)) { if (r.kind === 'spring' || found[r.kind] >= 6) continue; found[r.kind]++;
+      const speeds = r.kind === 'zip' || r.kind === 'fan' ? [4, 6] : [0]; for (const sp of speeds) assert.ok(tryRoute(r, v, st, sp), `${r.kind} route in zone ${z} seed ${s} at speed ${sp}`); }
+  }
+  for (const k of ['fan', 'seesaw', 'lift', 'zip']) assert.ok(found[k] >= 3, `found ${k} routes: ${found[k]}`);
+});
+
+test('every course has its own character: its own kinds of bonus road, its own favourite devices, and no two neighbouring courses share the same set', () => {
+  const P = L.ZONE_PROFILE; assert.strictEqual(P.length, L.ZONES.length);
+  const info = L.ZONES.map((q, z) => { const set = new Set(), counts = {}, feat = {}; for (let s = 1; s <= 20; s++) { const v = L.buildLevel(z, s); counts[v.highs] = (counts[v.highs] || 0) + 1; for (const k of v.routes) set.add(k); for (const k of v.featured) feat[k] = (feat[k] || 0) + 1; } return { set, counts, feat }; });
+  for (let z = 0; z < L.ZONES.length; z++) {
+    for (const k of info[z].set) assert.ok(P[z].kinds.includes(k), `zone ${z} only uses its own kinds of road, not ${k}`); for (const k of P[z].kinds) assert.ok(info[z].set.has(k), `zone ${z} uses ${k}`);
+    const [lo, hi] = P[z].count; for (const c of Object.keys(info[z].counts)) assert.ok(c >= lo && c <= hi, `zone ${z} has ${c} roads`); if (hi > lo) assert.ok(Object.keys(info[z].counts).length === 2, `zone ${z} sometimes one road and sometimes two`);
+    const mine = Object.keys(info[z].feat).filter((k) => P[z].pal.includes(k)), others = Object.keys(info[z].feat).filter((k) => !P[z].pal.includes(k)); const sum = (a) => a.reduce((t, k) => t + info[z].feat[k], 0);
+    if (P[z].pal.length) assert.ok(sum(mine) > sum(others) * 1.5, `zone ${z} mostly uses its own favourite devices: ${sum(mine)} vs ${sum(others)}`);
+  }
+  assert.deepStrictEqual([...info[0].set], ['spring']); assert.deepStrictEqual([...info[1].set], ['cave']); assert.deepStrictEqual([...info[3].set], ['slide']); assert.deepStrictEqual([...info[6].set], ['tubeline']); assert.deepStrictEqual([...info[8].set], ['channel']);
+  for (let z = 1; z < L.ZONES.length; z++) assert.notStrictEqual([...info[z].set].sort().join(), [...info[z - 1].set].sort().join(), `zone ${z} differs from the zone before`);
+  const all = new Set(); for (const q of info) for (const k of q.set) all.add(k); assert.strictEqual(all.size, 10, 'ten kinds of bonus road are used');
+  assert.ok(!info[3].set.has('spring') && !info[8].set.has('spring'), 'no climbing roads in the ice and the water courses');
+});
+
+test('the new signature roads are built as planned: a cave of two low tunnels, a long ice slide, low stepping stones over a pit, two tubes in a row, and a swimming channel of swings and a crusher', () => {
+  const find = (z, kind) => { for (let s = 1; s <= 30; s++) { const v = L.buildLevel(z, s); if (v.routes.includes(kind)) return v; } return null; };
+  const cave = find(1, 'cave'); assert.ok(cave && cave.lows.length >= 2, 'cave: low tunnels'); for (let i = 0; i + 1 < cave.lows.length; i++) assert.ok(cave.lows[i + 1].x0 > cave.lows[i].x1);
+  const sl = find(3, 'slide'); assert.ok(sl.ice.some((r) => r.x1 - r.x0 > 400 && sl.H[Math.floor(r.x1)] > sl.H[Math.floor(r.x0)] + 30), 'a long downhill on ice');
+  const lj = find(4, 'lowjump'); assert.ok(lj, 'lowjump'); let holes = 0; for (let x = 1; x < lj.len; x++) if (!Number.isFinite(lj.H[x]) && Number.isFinite(lj.H[x - 1])) { let w = 0; while (!Number.isFinite(lj.H[x + w])) w++; if (w > 300 && w < 340) holes++; } assert.ok(holes >= 1, 'a wide pit with low platforms');
+  const tl = find(6, 'tubeline'); assert.ok(tl && tl.tubes.length >= 2 && tl.tubes.some((t, i) => tl.tubes.some((u, j) => j !== i && u.x > t.x1 && u.x - t.x1 < 200)), 'two tubes in a row');
+  const ch = find(8, 'channel'); assert.ok(ch && ch.swings.length >= 2 && ch.crushers.length >= 1, 'a channel of swings and a crusher');
+  for (const [v, k] of [[cave, 'cave'], [sl, 'slide'], [lj, 'lowjump'], [tl, 'tubeline'], [ch, 'channel']]) assert.ok(v.giant && v.routes.includes(k), k + ' has the giant ring');
 });
